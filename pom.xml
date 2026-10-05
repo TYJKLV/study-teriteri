@@ -96,20 +96,10 @@
             <version>2.0.40</version>
         </dependency>
 
-        <!--redis-->
+        <!--redis：使用 Spring Boot 默认的 Lettuce 客户端（原代码排除了 lettuce 换成 jedis，已恢复默认）-->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-redis</artifactId>
-            <exclusions>
-                <exclusion>
-                    <groupId>io.lettuce</groupId>
-                    <artifactId>lettuce-core</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-        <dependency>
-            <groupId>redis.clients</groupId>
-            <artifactId>jedis</artifactId>
         </dependency>
 
         <!--一些常用工具类的包装-->
