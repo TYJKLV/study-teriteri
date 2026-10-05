@@ -27,7 +27,7 @@ import java.awt.geom.FlatteningPathIterator;
 import java.util.Objects;
 
 @Slf4j
-@Configuration
+// @Configuration  @EnableWebSecurity中，已有此注解
 @EnableWebSecurity  //可以往里面看到，引入一些.class文件，以及 其它的注解，目的：激活 Spring Security 的 Web 安全功能
 public class SecurityConfig {
 

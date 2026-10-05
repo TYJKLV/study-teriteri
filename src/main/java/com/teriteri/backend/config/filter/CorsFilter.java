@@ -7,7 +7,9 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
 
-@Component
+
+// 这个 Filter基本没用，若是 从安全性考虑，没有丝毫安全性；若是从可用性考虑，这段代码旨在解决 跨域问题，但 不存在跨域，因为 前端做了 处理
+// @Component
 public class CorsFilter implements Filter {
     @Override
     public void doFilter(ServletRequest req, ServletResponse res, FilterChain chain) throws IOException, ServletException {
@@ -21,6 +23,7 @@ public class CorsFilter implements Filter {
             response.setHeader("Access-Control-Allow-Origin", origin);
         }
 
+        // 触发时机：只有浏览器发送 OPTIONS 预检请求 时才会带 Access-Control-Request-Headers头
         String headers = request.getHeader("Access-Control-Request-Headers");
         if(headers!=null) {
             response.setHeader("Access-Control-Allow-Headers", headers);

@@ -29,7 +29,7 @@ public class RedisConfig extends CachingConfigurerSupport {
      * @return
      */
     @Bean
-    @SuppressWarnings("all")
+    @SuppressWarnings("all")   // 压制编译器警告  all：所有
     public KeyGenerator keyGenerator() {
         return new KeyGenerator() {
             @Override
@@ -47,6 +47,7 @@ public class RedisConfig extends CachingConfigurerSupport {
 
     /**
      * Redis 缓存管理器
+     *
      * @param connectionFactory
      * @return
      */
@@ -59,34 +60,44 @@ public class RedisConfig extends CachingConfigurerSupport {
 
     /**
      * 编写自己的 redisTemplate，用于与 Redis 进行交互，配置了json格式存储，序列化与反序列化
+     *
      * @param redisConnectionFactory
      * @return
      */
     @Bean
-    @SuppressWarnings("all") // 压制编译器警告  all：所有
+    @SuppressWarnings("all")
     public RedisTemplate<String, Object> redisTemplate(RedisConnectionFactory redisConnectionFactory) {
+        /*
+           下面两句代码是什么意思？
+           将跟 Redis建立连接，看成 打电话， RedisTemplate就是 一款手机，而 redisConnectionFactory 就是 sim卡
+           redisConnectionFactory 里面有 Redis的 IP地址、端口号、密码、数据库等信息，这些信息是从 .yml 来的
+           Spring Boot 会创建并注入到这个对象中，相当于 激活 sim卡
+         */
         // 为了方便自己开发，一般直接使用 <String, Object>
         RedisTemplate<String, Object> template = new RedisTemplate<String, Object>();
         template.setConnectionFactory(redisConnectionFactory);
 
         // 序列化配置
-        // json的序列化
-        Jackson2JsonRedisSerializer jackson2JsonRedisSerializer = new Jackson2JsonRedisSerializer(Object.class);    // 用json序列化任意对象类
-        ObjectMapper om = new ObjectMapper();       // 对象类序列化过程中用 ObjectMapper 进行转义
+        Jackson2JsonRedisSerializer jackson2JsonRedisSerializer = new Jackson2JsonRedisSerializer(Object.class); // 用 json进行序列化，对象为 Object
+        ObjectMapper om = new ObjectMapper();     // ObjectMapper 是 Jackson 库的核心类，真正负责 JSON 转换
+        // 对所有类型的成员（字段、getter、setter、构造器），无论其可见性是 public/private/protected/default等，都允许 Jackson 直接访问
         om.setVisibility(PropertyAccessor.ALL, JsonAutoDetect.Visibility.ANY);
+        // 在 JSON 里额外保存“这个对象原来是什么 Java 类”
         om.activateDefaultTyping(LaissezFaireSubTypeValidator.instance, ObjectMapper.DefaultTyping.NON_FINAL);
+        // 把配置好的 ObjectMapper 塞给序列化器
         jackson2JsonRedisSerializer.setObjectMapper(om);
         // String的序列化
         StringRedisSerializer stringRedisSerializer = new StringRedisSerializer();
 
         // key采用了String的序列化方式
         template.setKeySerializer(stringRedisSerializer);
-        // hash的key也采用String的序列化方式
+        // hash的 field 采用String的序列化方式
         template.setHashKeySerializer(stringRedisSerializer);
         // value序列化方式采用jackson
         template.setValueSerializer(jackson2JsonRedisSerializer);
         // hash的value序列化方式采用jackson
         template.setHashValueSerializer(jackson2JsonRedisSerializer);
+        // 手动 new 出来的 RedisTemplate，需要调用它来检查配置是否完整，并完成 Bean的初始化
         template.afterPropertiesSet();
 
         return template;
@@ -94,6 +105,7 @@ public class RedisConfig extends CachingConfigurerSupport {
 
     /**
      * 一个专门用于操作 Redis 字符串类型的模板，它是 RedisTemplate 的子类，只支持字符串数据的存储和检索
+     *
      * @param factory
      * @return
      */
