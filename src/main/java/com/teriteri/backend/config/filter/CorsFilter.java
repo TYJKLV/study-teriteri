@@ -9,7 +9,7 @@ import java.io.IOException;
 
 
 // 这个 Filter基本没用，若是 从安全性考虑，没有丝毫安全性；若是从可用性考虑，这段代码旨在解决 跨域问题，但 不存在跨域，因为 前端做了 处理
-// @Component
+@Component
 public class CorsFilter implements Filter {
     @Override
     public void doFilter(ServletRequest req, ServletResponse res, FilterChain chain) throws IOException, ServletException {

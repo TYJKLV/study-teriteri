@@ -17,6 +17,8 @@ import org.springframework.stereotype.Component;
 
 import java.util.Set;
 
+// TODO
+// 用到了 fastjson
 @Slf4j
 @Component
 public class WebSocketHandler extends SimpleChannelInboundHandler<TextWebSocketFrame> {

@@ -1,6 +1,5 @@
 package com.teriteri.backend.service.impl.video;
 
-import com.alibaba.fastjson2.JSONArray;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.teriteri.backend.mapper.FavoriteMapper;
@@ -47,8 +46,9 @@ public class FavoriteServiceImpl implements FavoriteService {
     @Override
     public List<Favorite> getFavorites(Integer uid, boolean isOwner) {
         String key = "favorites:" + uid;   // uid用户的收藏夹列表
-        String string = redisUtil.getObjectString(key);
-        List<Favorite> list = JSONArray.parseArray(string, Favorite.class);
+        // 缓存里直接是 List<Favorite> 对象（Jackson 序列化，带类型信息）；未命中时为 null
+        @SuppressWarnings("unchecked")
+        List<Favorite> list = (List<Favorite>) redisUtil.getValue(key);
         if (list != null) {
             if (!isOwner) {
                 List<Favorite> list1 = new ArrayList<>();
