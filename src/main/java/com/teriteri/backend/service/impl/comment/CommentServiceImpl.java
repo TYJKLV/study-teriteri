@@ -283,7 +283,10 @@ public class CommentServiceImpl implements CommentService {
      */
     @Override
     public CommentTree getMoreCommentsById(Integer id) {
-        Comment comment = commentMapper.selectById(id);
+        QueryWrapper<Comment> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq("id", id).ne("is_deleted", 1);
+        Comment comment = commentMapper.selectOne(queryWrapper);
+        if (comment == null) return null;
         return buildCommentTree(comment, 0L, -1L);
     }
 
@@ -295,6 +298,7 @@ public class CommentServiceImpl implements CommentService {
     @Override
     public void updateLikeAndDisLike(Integer id, boolean addLike) {
         UpdateWrapper<Comment> updateWrapper = new UpdateWrapper<>();
+        updateWrapper.eq("id", id);
         if (addLike) {
             updateWrapper.setSql("love = love + 1, bad = CASE WHEN " +
                     "bad - 1 < 0 " +

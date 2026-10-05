@@ -71,6 +71,11 @@ public class VideoUploadServiceImpl implements VideoUploadService {
     @Override
     public CustomResponse askCurrentChunk(String hash) {
         CustomResponse customResponse = new CustomResponse();
+        if (hash == null || !hash.matches("^[a-zA-Z0-9]{1,64}$")) {
+            customResponse.setCode(400);
+            customResponse.setMessage("hash值不合法");
+            return customResponse;
+        }
 
         // 查询本地
         // 获取分片文件的存储目录
@@ -102,6 +107,11 @@ public class VideoUploadServiceImpl implements VideoUploadService {
     @Override
     public CustomResponse uploadChunk(MultipartFile chunk, String hash, Integer index) throws IOException {
         CustomResponse customResponse = new CustomResponse();
+        if (hash == null || !hash.matches("^[a-zA-Z0-9]{1,64}$")) {
+            customResponse.setCode(400);
+            customResponse.setMessage("hash值不合法");
+            return customResponse;
+        }
         // 构建分片文件名
         String chunkFileName = hash + "-" + index;
 
@@ -142,6 +152,12 @@ public class VideoUploadServiceImpl implements VideoUploadService {
      */
     @Override
     public CustomResponse cancelUpload(String hash) {
+        CustomResponse customResponse = new CustomResponse();
+        if (hash == null || !hash.matches("^[a-zA-Z0-9]{1,64}$")) {
+            customResponse.setCode(400);
+            customResponse.setMessage("hash值不合法");
+            return customResponse;
+        }
 
         // 删除本地分片文件
         // 获取分片文件的存储目录
@@ -161,7 +177,7 @@ public class VideoUploadServiceImpl implements VideoUploadService {
 //        ossUploadUtil.deleteFiles("chunk/", hash + "-");
 
         // 不管删没删成功 返回成功响应
-        return new CustomResponse();
+        return customResponse;
     }
 
     /**
@@ -305,9 +321,16 @@ public class VideoUploadServiceImpl implements VideoUploadService {
         VideoStats videoStats = new VideoStats(video.getVid(),0,0,0,0,0,0,0,0);
         videoStatsMapper.insert(videoStats);
         esUtil.addVideo(video);
-        CompletableFuture.runAsync(() -> redisUtil.setExObjectValue("video:" + video.getVid(), video), taskExecutor);
-        CompletableFuture.runAsync(() -> redisUtil.addMember("video_status:0", video.getVid()), taskExecutor);
-        CompletableFuture.runAsync(() -> redisUtil.setExObjectValue("videoStats:" + video.getVid(), videoStats), taskExecutor);
+        // Redis 操作改为同步调用 + try-catch（避免"异步里的异步"导致 addMember 静默丢失，
+        // 进而管理端查不到待审核视频）。原代码用 CompletableFuture.runAsync 套异步，
+        // 返回的 Future 无 join，且无错误处理，一旦 Redis 连接抖动就会丢消息。
+        try {
+            redisUtil.setExObjectValue("video:" + video.getVid(), video);
+            redisUtil.addMember("video_status:0", video.getVid());
+            redisUtil.setExObjectValue("videoStats:" + video.getVid(), videoStats);
+        } catch (Exception e) {
+            log.error("投稿 {} 写入 Redis 失败，需手动补偿（将 vid 加入 video_status:0）", video.getVid(), e);
+        }
 
         // 其他逻辑 （发送消息通知写库成功）
     }

@@ -88,8 +88,8 @@ public class TokenValidationHandler extends SimpleChannelInboundHandler<TextWebS
             return null;
         }
         String userId = JwtUtil.getSubjectFromToken(token);
-        String role = JwtUtil.getClaimFromToken(token, "role");
-        User user = redisUtil.getObject("security:" + role + ":" + userId, User.class);
+        String channel = JwtUtil.getClaimFromToken(token, "channel");
+        User user = redisUtil.getObject("security:" + channel + ":" + userId, User.class);
 
         if (user == null) {
             log.error("用户未登录");

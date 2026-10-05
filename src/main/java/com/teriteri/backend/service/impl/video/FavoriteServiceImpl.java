@@ -4,8 +4,10 @@ import com.alibaba.fastjson2.JSONArray;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.teriteri.backend.mapper.FavoriteMapper;
+import com.teriteri.backend.mapper.FavoriteVideoMapper;
 import com.teriteri.backend.mapper.VideoMapper;
 import com.teriteri.backend.pojo.Favorite;
+import com.teriteri.backend.pojo.FavoriteVideo;
 import com.teriteri.backend.pojo.Video;
 import com.teriteri.backend.service.video.FavoriteService;
 import com.teriteri.backend.utils.RedisUtil;
@@ -25,6 +27,9 @@ import java.util.concurrent.Executor;
 public class FavoriteServiceImpl implements FavoriteService {
     @Autowired
     private FavoriteMapper favoriteMapper;
+
+    @Autowired
+    private FavoriteVideoMapper favoriteVideoMapper;
 
     @Autowired
     private VideoMapper videoMapper;
@@ -117,6 +122,20 @@ public class FavoriteServiceImpl implements FavoriteService {
 
     @Override
     public void delFavorite(Integer fid, Integer uid) {
-
+        Favorite favorite = favoriteMapper.selectById(fid);
+        if (favorite == null || !Objects.equals(favorite.getUid(), uid)) {
+            return;
+        }
+        // 软删除收藏夹记录
+        UpdateWrapper<Favorite> updateWrapper = new UpdateWrapper<>();
+        updateWrapper.eq("fid", fid).set("is_delete", 1);
+        favoriteMapper.update(null, updateWrapper);
+        // 删除该收藏夹下的全部视频关联记录
+        QueryWrapper<FavoriteVideo> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq("fid", fid);
+        favoriteVideoMapper.delete(queryWrapper);
+        // 清理相关redis缓存
+        redisUtil.delValue("favorite_video:" + fid);
+        redisUtil.delValue("favorites:" + uid);
     }
 }

@@ -1,5 +1,6 @@
 package com.teriteri.backend.pojo.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -10,8 +11,10 @@ import lombok.NoArgsConstructor;
 public class UserDTO {
     private Integer uid;
     private String nickname;
-    private String avatar_url;
-    private String bg_url;
+    @JsonProperty("avatar_url")
+    private String avatar; //tk：前端需要字段为 avatar_url，因此，将 avatar进行映射
+    @JsonProperty("bg_url")
+    private String background;
     private Integer gender; // 性别，0女性 1男性 2无性别，默认2
     private String description;
     private Integer exp;    // 经验值 50/200/1500/4500/10800/28800 分别是0~6级的区间

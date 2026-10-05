@@ -1,5 +1,6 @@
 package com.teriteri.backend.service.message;
 
+import com.teriteri.backend.pojo.CustomResponse;
 import com.teriteri.backend.pojo.MsgUnread;
 
 public interface MsgUnreadService {
@@ -15,8 +16,9 @@ public interface MsgUnreadService {
      * 清除指定用户的某一列未读消息
      * @param uid   用户ID
      * @param column    msg_unread表列名 "reply"/"at"/"love"/"system"/"whisper"/"dynamic"
+     * @return  响应对象，column 不在白名单内时返回错误响应
      */
-    void clearUnread(Integer uid, String column);
+    CustomResponse clearUnread(Integer uid, String column);
 
     /**
      * 私聊消息特有的减除一定数量的未读数

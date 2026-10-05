@@ -6,6 +6,7 @@ import com.teriteri.backend.im.IMServer;
 import com.teriteri.backend.mapper.ChatMapper;
 import com.teriteri.backend.mapper.MsgUnreadMapper;
 import com.teriteri.backend.pojo.Chat;
+import com.teriteri.backend.pojo.CustomResponse;
 import com.teriteri.backend.pojo.IMResponse;
 import com.teriteri.backend.pojo.MsgUnread;
 import com.teriteri.backend.service.message.MsgUnreadService;
@@ -15,15 +16,15 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 
 @Service
 public class MsgUnreadServiceImpl implements MsgUnreadService {
+
+    // 允许清除的未读计数列白名单，防止 column 参数被拼接进 SQL 造成注入
+    private static final Set<String> UNREAD_COLUMNS = new HashSet<>(Arrays.asList("reply", "at", "love", "system", "whisper", "dynamic"));
 
     @Autowired
     private MsgUnreadMapper msgUnreadMapper;
@@ -57,12 +58,18 @@ public class MsgUnreadServiceImpl implements MsgUnreadService {
      * @param column    msg_unread表列名 "reply"/"at"/"love"/"system"/"whisper"/"dynamic"
      */
     @Override
-    public void clearUnread(Integer uid, String column) {
+    public CustomResponse clearUnread(Integer uid, String column) {
+        CustomResponse customResponse = new CustomResponse();
+        if (!UNREAD_COLUMNS.contains(column)) {
+            customResponse.setCode(400);
+            customResponse.setMessage("column 参数不合法");
+            return customResponse;
+        }
         QueryWrapper<MsgUnread> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq("uid", uid).ne(column, 0);
         MsgUnread msgUnread = msgUnreadMapper.selectOne(queryWrapper);
         // 如果本身就是0条未读就没必要执行下面的操作了 不过如果有未读的话做这个查询就会带来额外的开销
-        if (msgUnread == null) return;
+        if (msgUnread == null) return customResponse;
 
         // 通知用户的全部channel 更新该消息类型未读数为0
         Map<String, Object> map = new HashMap<>();
@@ -84,6 +91,7 @@ public class MsgUnreadServiceImpl implements MsgUnreadService {
             updateWrapper1.eq("another_id", uid).set("unread", 0);
             chatMapper.update(null, updateWrapper1);
         }
+        return customResponse;
     }
 
     /**

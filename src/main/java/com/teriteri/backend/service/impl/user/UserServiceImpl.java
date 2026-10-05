@@ -3,8 +3,10 @@ package com.teriteri.backend.service.impl.user;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.teriteri.backend.mapper.UserMapper;
+import com.teriteri.backend.mapper.VideoMapper;
 import com.teriteri.backend.pojo.CustomResponse;
 import com.teriteri.backend.pojo.User;
+import com.teriteri.backend.pojo.Video;
 import com.teriteri.backend.pojo.VideoStats;
 import com.teriteri.backend.pojo.dto.UserDTO;
 import com.teriteri.backend.service.user.UserService;
@@ -21,10 +23,10 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
-import java.util.Set;
 import java.util.concurrent.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -34,6 +36,9 @@ import java.util.stream.Stream;
 public class UserServiceImpl implements UserService {
     @Autowired
     private UserMapper userMapper;
+
+    @Autowired
+    private VideoMapper videoMapper;
 
     @Autowired
     private VideoStatsService videoStatsService;
@@ -79,8 +84,8 @@ public class UserServiceImpl implements UserService {
         userDTO.setState(user.getState());
         if (user.getState() == 2) {
             userDTO.setNickname("账号已注销");
-            userDTO.setAvatar_url("https://cube.elemecdn.com/9/c2/f0ee8a3c7c9638a54940382568c9dpng.png");
-            userDTO.setBg_url("https://tinypic.host/images/2023/11/15/69PB2Q5W9D2U7L.png");
+            userDTO.setAvatar("https://cube.elemecdn.com/9/c2/f0ee8a3c7c9638a54940382568c9dpng.png");
+            userDTO.setBackground("https://tinypic.host/images/2023/11/15/69PB2Q5W9D2U7L.png");
             userDTO.setGender(2);
             userDTO.setDescription("-");
             userDTO.setExp(0);
@@ -95,8 +100,8 @@ public class UserServiceImpl implements UserService {
             return userDTO;
         }
         userDTO.setNickname(user.getNickname());
-        userDTO.setAvatar_url(user.getAvatar());
-        userDTO.setBg_url(user.getBackground());
+        userDTO.setAvatar(user.getAvatar());
+        userDTO.setBackground(user.getBackground());
         userDTO.setGender(user.getGender());
         userDTO.setDescription(user.getDescription());
         userDTO.setExp(user.getExp());
@@ -106,8 +111,8 @@ public class UserServiceImpl implements UserService {
         userDTO.setAuthMsg(user.getAuthMsg());
         userDTO.setFollowsCount(0);
         userDTO.setFansCount(0);
-        Set<Object> set = redisUtil.zReverange("user_video_upload:" + user.getUid(), 0L, -1L);
-        if (set == null || set.size() == 0) {
+        List<Integer> vidList = getPublishedVids(user.getUid());
+        if (vidList.isEmpty()) {
             userDTO.setVideoCount(0);
             userDTO.setLoveCount(0);
             userDTO.setPlayCount(0);
@@ -115,11 +120,12 @@ public class UserServiceImpl implements UserService {
         }
 
         // 并发执行每个视频数据统计的查询任务
-        List<VideoStats> list = set.stream().parallel()
-                .map(vid -> videoStatsService.getVideoStatsById((Integer) vid))
+        List<VideoStats> list = vidList.stream().parallel()
+                .map(videoStatsService::getVideoStatsById)
+                .filter(Objects::nonNull)
                 .collect(Collectors.toList());
 
-        int video = list.size(), love = 0, play = 0;
+        int video = vidList.size(), love = 0, play = 0;
         for (VideoStats videoStats : list) {
             love = love + videoStats.getGood();
             play = play + videoStats.getPlay();
@@ -159,17 +165,18 @@ public class UserServiceImpl implements UserService {
                             user.getAuthMsg(),
                             0,0,0,0,0
                     );
-                    Set<Object> set = redisUtil.zReverange("user_video_upload:" + user.getUid(), 0L, -1L);
-                    if (set == null || set.size() == 0) {
+                    List<Integer> vidList = getPublishedVids(user.getUid());
+                    if (vidList.isEmpty()) {
                         return Stream.of(userDTO);
                     }
 
                     // 并发执行每个视频数据统计的查询任务
-                    List<VideoStats> videoStatsList = set.stream().parallel()
-                            .map(vid -> videoStatsService.getVideoStatsById((Integer) vid))
+                    List<VideoStats> videoStatsList = vidList.stream().parallel()
+                            .map(videoStatsService::getVideoStatsById)
+                            .filter(Objects::nonNull)
                             .collect(Collectors.toList());
 
-                    int video = videoStatsList.size(), love = 0, play = 0;
+                    int video = vidList.size(), love = 0, play = 0;
                     for (VideoStats videoStats : videoStatsList) {
                         love = love + videoStats.getGood();
                         play = play + videoStats.getPlay();
@@ -182,8 +189,31 @@ public class UserServiceImpl implements UserService {
         ).collect(Collectors.toList());
     }
 
+    /**
+     * 取某个用户所有"已过审"稿件的 vid。
+     * <p>
+     * 这里原先读的是 Redis 的 user_video_upload zset，但那份派生数据全项目只有"审核通过"时写入一次，
+     * 没有任何重建机制（对比 video_status:* 有 EventListenerService 每天重建）。
+     * 一旦 Redis 重启丢数据，这些键就永久为空 —— 用户的投稿数、获赞数、播放数会全变 0，
+     * 个人主页的投稿列表也会整页空白。改为直接以 MySQL（权威源）为准，从根上消除这类不一致。
+     */
+    private List<Integer> getPublishedVids(Integer uid) {
+        QueryWrapper<Video> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq("uid", uid).eq("status", 1).select("vid");
+        List<Object> vidList = videoMapper.selectObjs(queryWrapper);
+        List<Integer> list = new ArrayList<>();
+        if (vidList != null) {
+            for (Object vid : vidList) {
+                list.add((Integer) vid);
+            }
+        }
+        return list;
+    }
+
+    // 同 updateVideoStatus：esUtil.updateUser 抛的是受检异常 IOException，必须显式声明回滚，
+    // 否则会出现"页面提示保存失败、数据库昵称其实已改、ES 里还是旧昵称"的分裂状态
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public CustomResponse updateUserInfo(Integer uid, String nickname, String desc, Integer gender) throws IOException {
         CustomResponse customResponse = new CustomResponse();
         if (nickname == null || nickname.trim().length() == 0) {

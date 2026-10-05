@@ -40,8 +40,8 @@
             <version>1.2.17</version>
         </dependency>
 
-        <!--简化代码，帮写什么get、setter函数-->
         <dependency>
+        <!--简化代码，帮写什么get、setter函数-->
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
             <version>1.18.24</version>
@@ -187,7 +187,7 @@
         <dependency>
             <groupId>co.elastic.clients</groupId>
             <artifactId>elasticsearch-java</artifactId>
-            <version>7.17.16</version>
+            <version>${elasticsearch.version}</version>
         </dependency>
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>

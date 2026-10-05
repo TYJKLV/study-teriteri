@@ -228,11 +228,20 @@ public class EventListenerService {
 
             // 更新redis
             for (Map<String, Integer> map : chatSet) {
-                Integer uid = map.get("user_id");
-                Integer aid = map.get("another_id");
-                String key = "chat_detailed_zset:" + uid + ":" + aid;
-                redisUtil.delValue(key);
-                redisUtil.zsetOfCollectionByTime(key, setMap.get(uid).get(aid));
+                try {
+                    Integer uid = map.get("user_id");
+                    Integer aid = map.get("another_id");
+                    String key = "chat_detailed_zset:" + uid + ":" + aid;
+                    redisUtil.delValue(key);
+                    Set<RedisUtil.ZObjTime> zObjTimes = setMap.get(uid) == null ? null : setMap.get(uid).get(aid);
+                    if (zObjTimes == null || zObjTimes.isEmpty()) {
+                        // 该对用户没有需要保留的消息记录，跳过即可
+                        continue;
+                    }
+                    redisUtil.zsetOfCollectionByTime(key, zObjTimes);
+                } catch (Exception e) {
+                    log.error("同步某对用户聊天记录到redis时出错了：" + e);
+                }
             }
         } catch (Exception e) {
             log.error("每天同步聊天记录时出错了：" + e);

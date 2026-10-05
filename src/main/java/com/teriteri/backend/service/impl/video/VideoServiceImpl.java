@@ -7,6 +7,7 @@ import com.teriteri.backend.mapper.VideoStatsMapper;
 import com.teriteri.backend.pojo.CustomResponse;
 import com.teriteri.backend.pojo.Video;
 import com.teriteri.backend.pojo.VideoStats;
+import com.teriteri.backend.pojo.dto.UserDTO;
 import com.teriteri.backend.service.category.CategoryService;
 import com.teriteri.backend.service.user.UserService;
 import com.teriteri.backend.service.utils.CurrentUser;
@@ -23,6 +24,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import javax.annotation.Nullable;
 import java.io.IOException;
@@ -341,13 +344,42 @@ public class VideoServiceImpl implements VideoService {
     }
 
     /**
+     * 获取某个用户自己的全部稿件（创作中心-稿件管理），包含审核中、未通过等尚未公开的稿件
+     * 与 getUserWorks 的区别：这里不能走"已过审"这类公开索引（未过审的稿件本来就不在里面），
+     * 所以直接以数据库为准，并且只返回没被删除的
+     * @param uid 用户ID
+     * @return 稿件列表，每项含视频、用户、分区、统计数据
+     */
+    @Override
+    public List<Map<String, Object>> getUserManuscripts(Integer uid) {
+        QueryWrapper<Video> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq("uid", uid).ne("status", 3).orderByDesc("upload_date").last("LIMIT 500");
+        List<Video> videos = videoMapper.selectList(queryWrapper);
+        if (videos.isEmpty()) return Collections.emptyList();
+        UserDTO user = userService.getUserById(uid);    // 这批稿件都属于同一个人，查一次即可
+        List<Map<String, Object>> result = new ArrayList<>(videos.size());
+        for (Video video : videos) {
+            Map<String, Object> map = new HashMap<>();
+            map.put("video", video);
+            map.put("user", user);
+            map.put("stats", videoStatsService.getVideoStatsById(video.getVid()));
+            map.put("category", categoryService.getCategoryById(video.getMcId(), video.getScId()));
+            result.add(map);
+        }
+        return result;
+    }
+
+    /**
      * 更新视频状态，包括过审、不通过、删除，其中审核相关需要管理员权限，删除可以是管理员或者投稿用户
      * @param vid   视频ID
      * @param status 要修改的状态，1通过 2不通过 3删除
      * @return 无data返回，仅返回响应信息
      */
+    // rollbackFor = Exception.class：本方法抛的是受检异常 IOException，而 Spring 默认只对
+    // RuntimeException / Error 回滚；不显式声明的话，ES / Redis 更新失败时数据库的改动会被提交，
+    // 出现"接口报错但数据库已改、名单和索引还是旧的"的状态分裂。声明后失败即全部撤销，可放心重试。
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public CustomResponse updateVideoStatus(Integer vid, Integer status) throws IOException {
         CustomResponse customResponse = new CustomResponse();
         Integer userId = currentUser.getUserId();
@@ -376,7 +408,6 @@ public class VideoServiceImpl implements VideoService {
                     esUtil.updateVideo(video);  // 更新ES视频文档
                     redisUtil.delMember("video_status:" + lastStatus, vid);     // 从旧状态移除
                     redisUtil.addMember("video_status:1", vid);     // 加入新状态
-                    redisUtil.zset("user_video_upload:" + video.getUid(), video.getVid());
                     redisUtil.delValue("video:" + vid);     // 删除旧的视频信息
                     return customResponse;
                 } else {
@@ -406,7 +437,6 @@ public class VideoServiceImpl implements VideoService {
                     esUtil.updateVideo(video);  // 更新ES视频文档
                     redisUtil.delMember("video_status:" + lastStatus, vid);     // 从旧状态移除
                     redisUtil.addMember("video_status:2", vid);     // 加入新状态
-                    redisUtil.zsetDelMember("user_video_upload:" + video.getUid(), video.getVid());
                     redisUtil.delValue("video:" + vid);     // 删除旧的视频信息
                     return customResponse;
                 } else {
@@ -426,10 +456,11 @@ public class VideoServiceImpl implements VideoService {
                 return customResponse;
             }
             if (Objects.equals(userId, video.getUid()) || currentUser.isAdmin()) {
-                String videoUrl = video.getVideoUrl();
-                String videoPrefix = videoUrl.split("aliyuncs.com/")[1];  // OSS视频文件名
-                String coverUrl = video.getCoverUrl();
-                String coverPrefix = coverUrl.split("aliyuncs.com/")[1];  // OSS封面文件名
+                // OSS 上的对象 key（bucket 内的路径）。用 indexOf 而不是 split 取，
+                // 这样 URL 不是 OSS 地址（比如历史遗留的本地文件路径）时只会拿到 null，
+                // 而不是让 split 直接抛 ArrayIndexOutOfBoundsException 把整个删除卡死。
+                String videoPrefix = ossKeyOf(video.getVideoUrl());     // OSS视频文件名
+                String coverPrefix = ossKeyOf(video.getCoverUrl());     // OSS封面文件名
                 Integer lastStatus = video.getStatus();
                 UpdateWrapper<Video> updateWrapper = new UpdateWrapper<>();
                 updateWrapper.eq("vid", vid).set("status", 3).set("delete_date", new Date());     // 更新视频状态已删除
@@ -439,11 +470,8 @@ public class VideoServiceImpl implements VideoService {
                     esUtil.deleteVideo(vid);
                     redisUtil.delMember("video_status:" + lastStatus, vid);     // 从旧状态移除
                     redisUtil.delValue("video:" + vid);     // 删除旧的视频信息
+                    redisUtil.delValue("videoStats:" + vid);    // 删除统计数据缓存（缓存 miss 会回源数据库，安全）
                     redisUtil.delValue("danmu_idset:" + vid);   // 删除该视频的弹幕
-                    redisUtil.zsetDelMember("user_video_upload:" + video.getUid(), video.getVid());
-                    // 搞个异步线程去删除OSS的源文件
-                    CompletableFuture.runAsync(() -> ossUtil.deleteFiles(videoPrefix), taskExecutor);
-                    CompletableFuture.runAsync(() -> ossUtil.deleteFiles(coverPrefix), taskExecutor);
                     // 批量删除该视频下的全部评论缓存
                     CompletableFuture.runAsync(() -> {
                         Set<Object> set = redisUtil.zReverange("comment_video:" + vid, 0, -1);
@@ -452,6 +480,8 @@ public class VideoServiceImpl implements VideoService {
                         list.add("comment_video:" + vid);
                         redisUtil.delValues(list);
                     }, taskExecutor);
+                    // OSS 源文件与封面等事务提交后再删（删除 OSS 不可逆，见方法内注释）
+                    deleteOssFilesAfterCommit(videoPrefix, coverPrefix);
                     return customResponse;
                 } else {
                     // 更新失败，处理错误情况
@@ -468,5 +498,61 @@ public class VideoServiceImpl implements VideoService {
         customResponse.setCode(500);
         customResponse.setMessage("更新状态失败");
         return customResponse;
+    }
+
+    /**
+     * 从 OSS 文件 URL 中取出 bucket 内的对象 key。
+     * 形如 https://tlvk-teriteri.oss-cn-hangzhou.aliyuncs.com/2026-09-28/video/xxx.mp4 → 2026-09-28/video/xxx.mp4
+     * @param url   文件的完整访问地址
+     * @return  OSS 对象 key；不是 OSS 地址时返回 null
+     */
+    private static String ossKeyOf(String url) {
+        if (url == null) return null;
+        int index = url.indexOf("aliyuncs.com/");
+        return index < 0 ? null : url.substring(index + "aliyuncs.com/".length());
+    }
+
+    /**
+     * 把「删除 OSS 上的源文件与封面」推迟到当前事务提交之后再执行。
+     * <p>
+     * 原实现是在事务方法体内直接把删除任务丢给线程池，线程池可能立刻就开始执行。
+     * 一旦这之后的步骤（例如 esUtil.deleteVideo）抛异常导致事务回滚，数据库里的稿件会被还原成"还在"，
+     * 而源文件已经被真删掉了 —— 用户看着稿件还在、点进去却播不了，且无法恢复。
+     * 删除 OSS 不可逆，必须等数据库那边确实提交成功了再动手。
+     * <p>
+     * afterCommit 里抛异常不会（也无法）回滚已经提交的事务，所以这里全部 try-catch，
+     * 失败只把对象 key 打进日志，留待人工补偿。
+     *
+     * @param videoPrefix   OSS 上的视频源文件 key，为空则跳过
+     * @param coverPrefix   OSS 上的封面文件 key，为空则跳过
+     */
+    private void deleteOssFilesAfterCommit(String videoPrefix, String coverPrefix) {
+        Runnable deleteTask = () -> {
+            if (videoPrefix != null) {
+                try {
+                    ossUtil.deleteFiles(videoPrefix);
+                } catch (Exception e) {
+                    log.error("删除 OSS 视频源文件失败，需人工清理。key={}", videoPrefix, e);
+                }
+            }
+            if (coverPrefix != null) {
+                try {
+                    ossUtil.deleteFiles(coverPrefix);
+                } catch (Exception e) {
+                    log.error("删除 OSS 封面文件失败，需人工清理。key={}", coverPrefix, e);
+                }
+            }
+        };
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    CompletableFuture.runAsync(deleteTask, taskExecutor);
+                }
+            });
+        } else {
+            // 本方法带 @Transactional，正常走不到这里；万一事务没生效也不能让文件漏删
+            CompletableFuture.runAsync(deleteTask, taskExecutor);
+        }
     }
 }

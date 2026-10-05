@@ -51,18 +51,30 @@ public class FavoriteVideoServiceImpl implements FavoriteVideoService {
     @Override
     public void addToFav(Integer uid, Integer vid, Set<Integer> fids) {
         Date currentTime = new Date();
+        Set<Integer> activeFids = new HashSet<>();
         // 使用事务批量操作 减少连接sql的开销
         try (SqlSession sqlSession = sqlSessionFactory.openSession(ExecutorType.BATCH)) {
             // 查询已存在的记录
             QueryWrapper<FavoriteVideo> queryWrapper = new QueryWrapper<>();
             queryWrapper.eq("vid", vid).in("fid", fids);
             List<FavoriteVideo> existingRecords = favoriteVideoMapper.selectList(queryWrapper);
-            // 更新已存在的记录
-            UpdateWrapper<FavoriteVideo> updateWrapper = new UpdateWrapper<>();
-            updateWrapper.eq("vid", vid).in("fid", fids).set("time", currentTime).set("is_remove", 0);
-            favoriteVideoMapper.update(null, updateWrapper);
-            // 插入不存在的记录
             Set<Integer> existingFids = existingRecords.stream().map(FavoriteVideo::getFid).collect(Collectors.toSet());
+            // 已收藏且未移除的收藏夹无需任何操作
+            activeFids = existingRecords.stream()
+                    .filter(record -> record.getIsRemove() == 0)
+                    .map(FavoriteVideo::getFid)
+                    .collect(Collectors.toSet());
+            // 恢复之前被移除的记录
+            Set<Integer> removedFids = existingRecords.stream()
+                    .filter(record -> record.getIsRemove() == 1)
+                    .map(FavoriteVideo::getFid)
+                    .collect(Collectors.toSet());
+            if (!removedFids.isEmpty()) {
+                UpdateWrapper<FavoriteVideo> updateWrapper = new UpdateWrapper<>();
+                updateWrapper.eq("vid", vid).in("fid", removedFids).set("time", currentTime).set("is_remove", 0);
+                favoriteVideoMapper.update(null, updateWrapper);
+            }
+            // 插入不存在的记录
             Set<Integer> newFids = fids.stream().filter(fid -> !existingFids.contains(fid)).collect(Collectors.toSet());
             List<FavoriteVideo> newRecords = newFids.stream()
                     .map(fid -> new FavoriteVideo(null, vid, fid, currentTime, 0))
@@ -72,14 +84,19 @@ public class FavoriteVideoServiceImpl implements FavoriteVideoService {
                     favoriteVideoMapper.insert(record);
                 }
             }
-            // 更新favorite表的收藏数
-            UpdateWrapper<Favorite> updateWrapper1 = new UpdateWrapper<>();
-            updateWrapper1.in("fid", fids).setSql("count = count + 1");
-            favoriteMapper.update(null, updateWrapper1);
+            // 更新favorite表的收藏数，只统计本次实际新增收藏（恢复+新插入）的收藏夹
+            Set<Integer> incFids = new HashSet<>(removedFids);
+            incFids.addAll(newFids);
+            if (!incFids.isEmpty()) {
+                UpdateWrapper<Favorite> updateWrapper1 = new UpdateWrapper<>();
+                updateWrapper1.in("fid", incFids).setSql("count = count + 1");
+                favoriteMapper.update(null, updateWrapper1);
+            }
             sqlSession.commit();
         }
-        // 更新 Redis 中每个 ZSet
+        // 更新 Redis 中本次实际新增收藏的 ZSet
         for (Integer fid : fids) {
+            if (activeFids.contains(fid)) continue;
             String key = "favorite_video:" + fid;
             redisUtil.zset(key, vid);
         }

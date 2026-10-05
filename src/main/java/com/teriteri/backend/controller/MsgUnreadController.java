@@ -34,8 +34,8 @@ public class MsgUnreadController {
      * @param column    msg_unread表列名 "reply"/"at"/"love"/"system"/"whisper"/"dynamic"
      */
     @PostMapping("/msg-unread/clear")
-    public void clearUnread(@RequestParam("column") String column) {
+    public CustomResponse clearUnread(@RequestParam("column") String column) {
         Integer uid = currentUser.getUserId();
-        msgUnreadService.clearUnread(uid, column);
+        return msgUnreadService.clearUnread(uid, column);
     }
 }

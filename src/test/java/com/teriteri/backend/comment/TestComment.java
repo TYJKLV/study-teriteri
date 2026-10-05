@@ -5,7 +5,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
-@SpringBootTest(properties = {"spring.profiles.active=test"})
+import java.util.UUID;
+
+// @SpringBootTest(properties = {"spring.profiles.active=test"})
 public class TestComment {
     @Autowired
     private CommentService commentService;
@@ -20,6 +22,16 @@ public class TestComment {
         String content = "这是第一条根级评论";
 //        boolean result = commentService.sendComment(vid, uid, isRoot, fatherId, toUserId, content);
 //        System.out.println(result);
+    }
+
+    @Test
+    public void test(){
+        String s = " " == null ? null:" ";
+        System.out.println("1" + s + "1");
+    }
+
+    @Test
+    public void test1(){
     }
 
 

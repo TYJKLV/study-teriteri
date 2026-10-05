@@ -13,6 +13,9 @@ import java.util.Date;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
+import static com.teriteri.backend.utils.ConstantsUtil.JWT_KEY;
+import static com.teriteri.backend.utils.ConstantsUtil.JWT_TTL;
+
 @Component
 @Slf4j
 public class JwtUtil {
@@ -20,8 +23,10 @@ public class JwtUtil {
     private RedisUtil redisUtil;
 
     // 有效期2天，记得修改 UserAccountServiceImpl 的 login 中redis的时间，注意单位，这里是毫秒
-    public static final long JWT_TTL = 1000L * 60 * 60 * 24 * 2;
-    public static final String JWT_KEY = "bEn2xiAnG0mU2TERITERI0YOu5HzH0hE1CwJ1GOnG1tOnG6kAifAwAnchEnG";
+    // public static final long JWT_TTL = 60 * 60 * 24 * 2;
+    // 旧的 JWT_KEY
+    // public static final String JWT_KEY = "bEn2xiAnG0mU2TERITERI0YOu5HzH0hE1CwJ1GOnG1tOnG6kAifAwAnchEnG";
+
     public static String getUUID() {
         return UUID.randomUUID().toString().replaceAll("-", "");
     }
@@ -31,29 +36,29 @@ public class JwtUtil {
      * @return 加密后的token密钥
      */
     public static SecretKey getTokenSecret() {
-        byte[] encodeKey = Base64.getDecoder().decode(JwtUtil.JWT_KEY);
+        byte[] encodeKey = Base64.getDecoder().decode(JWT_KEY);
         return new SecretKeySpec(encodeKey, 0, encodeKey.length, "HmacSHA256");
     }
 
     /**
      * 生成token
      * @param uid 用户id
-     * @param role 用户角色 user/admin
+     * @param channel 登录渠道 client/admin
      * @return token
      */
-    public String createToken(String uid, String role) {
+    public String createToken(String uid, String channel) {
         String uuid = getUUID();
         SignatureAlgorithm signatureAlgorithm = SignatureAlgorithm.HS256;
         SecretKey secretKey = getTokenSecret();
         long nowMillis = System.currentTimeMillis();
         Date now = new Date(nowMillis);
-        long expMillis = nowMillis + JwtUtil.JWT_TTL;
+        long expMillis = nowMillis + JWT_TTL * 1000L;
         Date expDate = new Date(expMillis);
 
         String token = Jwts.builder()
                 .setId(uuid)    // 随机id，用于生成无规则token
                 .setSubject(uid)    // 加密主体
-                .claim("role", role)    // token角色参数 user/admin 用于区分普通用户和管理员
+                .claim("channel", channel)    // token登录渠道参数 user/admin 用于区分客户端和管理端
                 .setIssuer("https://api.teriteri.fun")      // 发行方  都是用来验证token合法性的，可以不设置，
                 .setAudience("https://www.teriteri.fun")    // 接收方  本项目也没有额外用来验证合法性的逻辑
                 .signWith(secretKey, signatureAlgorithm)
@@ -62,8 +67,8 @@ public class JwtUtil {
                 .compact();
 
         try {
-            //缓存token信息，管理员和用户之间不要冲突
-            redisUtil.setExValue("token:" + role + ":" + uid, token, JwtUtil.JWT_TTL, TimeUnit.MILLISECONDS);
+            //缓存token信息，管理员和用户之间不要冲突                           单位是 ms，因此，要乘 1000，才等于 2天
+            redisUtil.setExValue("token:" + channel + ":" + uid, token, JWT_TTL * 1000L, TimeUnit.MILLISECONDS);
         } catch (Exception e) {
             log.error("存储redis数据异常", e);
         }
@@ -99,14 +104,14 @@ public class JwtUtil {
     /**
      * 删除token，似乎用不到
      * @param token token
-     * @param role role 用户角色 user/admin
+     * @param channel 登录渠道 client/admin
      */
-    public void deleteToken(String token, String role) {
+    public void deleteToken(String token, String channel) {
         String uid;
         if (StringUtils.isNotEmpty(token)) {
             uid = getSubjectFromToken(token);
             try {
-                redisUtil.delValue("token:" + role + ":" + uid);
+                redisUtil.delValue("token:" + channel + ":" + uid);
             } catch (Exception e) {
                 log.error("删除redis数据异常", e);
             }
@@ -245,15 +250,15 @@ public class JwtUtil {
             return false;
         }
         String uid = claims.getSubject();
-        String role;
-        if (claims.containsKey("role")) {
-            role = claims.get("role").toString();
+        String channel;
+        if (claims.containsKey("channel")) {
+            channel = claims.get("channel").toString();
         } else {
-            role = "";
+            channel = "";
         }
         String cacheToken;
         try {
-            cacheToken = String.valueOf(redisUtil.getValue("token:" + role + ":" + uid));
+            cacheToken = String.valueOf(redisUtil.getValue("token:" + channel + ":" + uid));
         } catch (Exception e) {
             cacheToken = null;
             log.error("获取不到缓存的token", e);

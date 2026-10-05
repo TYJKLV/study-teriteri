@@ -105,6 +105,10 @@ public class OssUtil {
      * @throws IOException
      */
     public String appendUploadVideo(@NonNull String hash) throws IOException {
+        if (!hash.matches("^[a-zA-Z0-9]{1,64}$")) {
+            log.error("hash值不合法，已拒绝合并分片");
+            return null;
+        }
         // 生成文件名
         String uuid = System.currentTimeMillis() + UUID.randomUUID().toString().replace("-", "");
         String fileName = uuid + ".mp4";

@@ -19,6 +19,7 @@ import com.teriteri.backend.utils.JwtUtil;
 import com.teriteri.backend.utils.RedisUtil;
 import io.netty.channel.*;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.security.authentication.AuthenticationProvider;
@@ -34,6 +35,8 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
+
+import static com.teriteri.backend.utils.ConstantsUtil.*;
 
 @Slf4j
 @Service
@@ -74,13 +77,16 @@ public class UserAccountServiceImpl implements UserAccountService {
 
     /**
      * 用户注册
-     * @param username 账号
-     * @param password 密码
+     *
+     * @param username          账号
+     * @param password          密码
      * @param confirmedPassword 确认密码
      * @return CustomResponse对象
      */
+    // 同 updateVideoStatus：esUtil.addUser 抛的是受检异常 IOException，必须显式声明回滚。
+    // 否则 ES 故障时账号其实已经建好（能登录），但页面提示"注册失败"，用户重试还会被告知"账号已存在"
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public CustomResponse register(String username, String password, String confirmedPassword) throws IOException {
         CustomResponse customResponse = new CustomResponse();
         if (username == null) {
@@ -104,12 +110,12 @@ public class UserAccountServiceImpl implements UserAccountService {
             customResponse.setMessage("账号长度不能大于50");
             return customResponse;
         }
-        if (password.length() == 0 || confirmedPassword.length() == 0 ) {
+        if (password.length() == 0 || confirmedPassword.length() == 0) {
             customResponse.setCode(403);
             customResponse.setMessage("密码不能为空");
             return customResponse;
         }
-        if (password.length() > 50 || confirmedPassword.length() > 50 ) {
+        if (password.length() > 50 || confirmedPassword.length() > 50) {
             customResponse.setCode(403);
             customResponse.setMessage("密码长度不能大于50");
             return customResponse;
@@ -121,8 +127,9 @@ public class UserAccountServiceImpl implements UserAccountService {
         }
 
         QueryWrapper<User> queryWrapper = new QueryWrapper<>();
-        queryWrapper.eq("username", username);
-        queryWrapper.ne("state", 2);
+        // 拼接 sql语句
+        queryWrapper.eq("username", username); //equals
+        queryWrapper.ne("state", 2);  //ne = NoEquals
         User user = userMapper.selectOne(queryWrapper);   //查询数据库里值等于username并且没有注销的数据
         if (user != null) {
             customResponse.setCode(403);
@@ -130,24 +137,15 @@ public class UserAccountServiceImpl implements UserAccountService {
             return customResponse;
         }
 
-        QueryWrapper<User> queryWrapper1 = new QueryWrapper<>();
-        queryWrapper1.orderByDesc("uid").last("limit 1");    // 降序选第一个
-        User last_user = userMapper.selectOne(queryWrapper1);
-        int new_user_uid;
-        if (last_user == null) {
-            new_user_uid = 1;
-        } else {
-            new_user_uid = last_user.getUid() + 1;
-        }
         String encodedPassword = passwordEncoder.encode(password);  // 密文存储
-        String avatar_url = "https://cube.elemecdn.com/9/c2/f0ee8a3c7c9638a54940382568c9dpng.png";
-        String bg_url = "https://tinypic.host/images/2023/11/15/69PB2Q5W9D2U7L.png";
+        String avatar_url = USER_AVATAR_URL;
+        String bg_url = USER_BG_URL;
         Date now = new Date();
         User new_user = new User(
                 null,
                 username,
                 encodedPassword,
-                "用户_" + new_user_uid,
+                "用户",
                 avatar_url,
                 bg_url,
                 2,
@@ -162,8 +160,11 @@ public class UserAccountServiceImpl implements UserAccountService {
                 now,
                 null
         );
-        userMapper.insert(new_user);
-        msgUnreadMapper.insert(new MsgUnread(new_user.getUid(),0,0,0,0,0,0));
+        userMapper.insert(new_user);    // uid 由数据库自增生成，并回填到 new_user 中
+        UpdateWrapper<User> updateWrapper = new UpdateWrapper<>();
+        updateWrapper.eq("uid", new_user.getUid()).set("nickname", "用户_" + new_user.getUid());
+        userMapper.update(null, updateWrapper);
+        msgUnreadMapper.insert(new MsgUnread(new_user.getUid(), 0, 0, 0, 0, 0, 0));
         favoriteMapper.insert(new Favorite(null, new_user.getUid(), 1, 1, null, "默认收藏夹", "", 0, null));
         esUtil.addUser(new_user);
         customResponse.setMessage("注册成功！欢迎加入T站");
@@ -172,6 +173,7 @@ public class UserAccountServiceImpl implements UserAccountService {
 
     /**
      * 用户登录
+     *
      * @param username 账号
      * @param password 密码
      * @return CustomResponse对象
@@ -184,6 +186,7 @@ public class UserAccountServiceImpl implements UserAccountService {
         //将用户名和密码封装成一个类，这个类不会存明文了，将是加密后的字符串
         UsernamePasswordAuthenticationToken authenticationToken =
                 new UsernamePasswordAuthenticationToken(username, password);
+                //该构造器，authenticated默认为 false，表示还没有进行 认证
 
         // 用户名或密码错误会抛出异常
         Authentication authenticate;
@@ -199,10 +202,12 @@ public class UserAccountServiceImpl implements UserAccountService {
         UserDetailsImpl loginUser = (UserDetailsImpl) authenticate.getPrincipal();
         User user = loginUser.getUser();
 
-        // 顺便更新redis中的数据
-        redisUtil.setExObjectValue("user:" + user.getUid(), user);  // 默认存活1小时
+        // tk：冗余代码
+        /*// 顺便更新redis中的数据
+        redisUtil.setExObjectValue("user:" + user.getUid(), user);  // 默认存活时间：1h*/
 
         // 检查账号状态，1 表示封禁中，不允许登录
+        // 这里的账号状态检验，替代了 UserDetailsImpl中的 四个 isXX()
         if (user.getState() == 1) {
             customResponse.setCode(403);
             customResponse.setMessage("账号异常，封禁中");
@@ -213,9 +218,9 @@ public class UserAccountServiceImpl implements UserAccountService {
         String token = jwtUtil.createToken(user.getUid().toString(), "user");
 
         try {
-            // 把完整的用户信息存入redis，时间跟token一样，注意单位
-            // 这里缓存的user信息建议只供读取uid用，其中的状态等非静态数据可能不准，所以 redis另外存值
-            redisUtil.setExObjectValue("security:user:" + user.getUid(), user, 60L * 60 * 24 * 2, TimeUnit.SECONDS);
+            // 把完整的用户信息存入redis，时间跟token一样，注意单位；
+            // 这里缓存的user信息建议只供读取uid用，其中的状态等非静态数据可能不准，所以 redis另外存值           过期时间：2天
+            redisUtil.setExObjectValue("security:user:" + user.getUid(), user, JWT_TTL, TimeUnit.SECONDS);
             // 将该用户放到redis中在线集合
 //            redisUtil.addMember("login_member", user.getUid());
         } catch (Exception e) {
@@ -225,10 +230,12 @@ public class UserAccountServiceImpl implements UserAccountService {
 
         // 每次登录顺便返回user信息，就省去再次发送一次获取用户个人信息的请求
         UserDTO userDTO = new UserDTO();
-        userDTO.setUid(user.getUid());
+        // tk：
+        BeanUtils.copyProperties(user,userDTO); //将 user对应字段 拷贝到 userDTO中
+/*      userDTO.setUid(user.getUid());
         userDTO.setNickname(user.getNickname());
-        userDTO.setAvatar_url(user.getAvatar());
-        userDTO.setBg_url(user.getBackground());
+        userDTO.setAvatar(user.getAvatar());
+        userDTO.setBackground(user.getBackground());
         userDTO.setGender(user.getGender());
         userDTO.setDescription(user.getDescription());
         userDTO.setExp(user.getExp());
@@ -236,7 +243,7 @@ public class UserAccountServiceImpl implements UserAccountService {
         userDTO.setVip(user.getVip());
         userDTO.setState(user.getState());
         userDTO.setAuth(user.getAuth());
-        userDTO.setAuthMsg(user.getAuthMsg());
+        userDTO.setAuthMsg(user.getAuthMsg());*/
 
         Map<String, Object> final_map = new HashMap<>();
         final_map.put("token", token);
@@ -248,25 +255,36 @@ public class UserAccountServiceImpl implements UserAccountService {
 
     /**
      * 管理员登录
+     *
      * @param username 账号
      * @param password 密码
      * @return CustomResponse对象
      */
     @Override
     public CustomResponse adminLogin(String username, String password) {
+        CustomResponse customResponse = new CustomResponse();
         UsernamePasswordAuthenticationToken authenticationToken =
                 new UsernamePasswordAuthenticationToken(username, password);
-        Authentication authenticate = authenticationProvider.authenticate(authenticationToken);
+        // 用户名或密码错误会抛出异常
+        Authentication authenticate;
+        try {
+            authenticate = authenticationProvider.authenticate(authenticationToken);
+        } catch (Exception e) {
+            customResponse.setCode(403);
+            customResponse.setMessage("账号或密码不正确");
+            return customResponse;
+        }
         UserDetailsImpl loginUser = (UserDetailsImpl) authenticate.getPrincipal();
         User user = loginUser.getUser();
-        CustomResponse customResponse = new CustomResponse();
         // 普通用户无权访问
         if (user.getRole() == 0) {
             customResponse.setCode(403);
             customResponse.setMessage("您不是管理员，无权访问");
             return customResponse;
         }
+
         // 顺便更新redis中的数据
+        // TODO
         redisUtil.setExObjectValue("user:" + user.getUid(), user);  // 默认存活1小时
         // 检查账号状态，1 表示封禁中，不允许登录
         if (user.getState() == 1) {
@@ -274,28 +292,17 @@ public class UserAccountServiceImpl implements UserAccountService {
             customResponse.setMessage("账号异常，封禁中");
             return customResponse;
         }
-        //将uid封装成一个jwttoken，同时token也会被缓存到redis中
+        //将uid封装成一个 JWt token，同时token也会被缓存到redis中
         String token = jwtUtil.createToken(user.getUid().toString(), "admin");
         try {
-            redisUtil.setExObjectValue("security:admin:" + user.getUid(), user, 60L * 60 * 24 * 2, TimeUnit.SECONDS);
+            redisUtil.setExObjectValue("security:admin:" + user.getUid(), user, JWT_TTL, TimeUnit.SECONDS);
         } catch (Exception e) {
             log.error("存储redis数据失败");
             throw e;
         }
         // 每次登录顺便返回user信息，就省去再次发送一次获取用户个人信息的请求
         UserDTO userDTO = new UserDTO();
-        userDTO.setUid(user.getUid());
-        userDTO.setNickname(user.getNickname());
-        userDTO.setAvatar_url(user.getAvatar());
-        userDTO.setBg_url(user.getBackground());
-        userDTO.setGender(user.getGender());
-        userDTO.setDescription(user.getDescription());
-        userDTO.setExp(user.getExp());
-        userDTO.setCoin(user.getCoin());
-        userDTO.setVip(user.getVip());
-        userDTO.setState(user.getState());
-        userDTO.setAuth(user.getAuth());
-        userDTO.setAuthMsg(user.getAuthMsg());
+        BeanUtils.copyProperties(user,userDTO);
 
         Map<String, Object> final_map = new HashMap<>();
         final_map.put("token", token);
@@ -307,6 +314,7 @@ public class UserAccountServiceImpl implements UserAccountService {
 
     /**
      * 获取用户个人信息
+     *
      * @return CustomResponse对象
      */
     @Override
@@ -333,6 +341,7 @@ public class UserAccountServiceImpl implements UserAccountService {
 
     /**
      * 获取管理员个人信息
+     *
      * @return CustomResponse对象
      */
     @Override
@@ -370,8 +379,8 @@ public class UserAccountServiceImpl implements UserAccountService {
         UserDTO userDTO = new UserDTO();
         userDTO.setUid(user.getUid());
         userDTO.setNickname(user.getNickname());
-        userDTO.setAvatar_url(user.getAvatar());
-        userDTO.setBg_url(user.getBackground());
+        userDTO.setAvatar(user.getAvatar());
+        userDTO.setBackground(user.getBackground());
         userDTO.setGender(user.getGender());
         userDTO.setDescription(user.getDescription());
         userDTO.setExp(user.getExp());

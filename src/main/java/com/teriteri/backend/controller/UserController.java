@@ -4,13 +4,11 @@ import com.teriteri.backend.pojo.CustomResponse;
 import com.teriteri.backend.service.user.UserService;
 import com.teriteri.backend.service.utils.CurrentUser;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 @RestController
+@RequestMapping("/user")  //公共路径前缀
 public class UserController {
     @Autowired
     private UserService userService;
@@ -25,7 +23,7 @@ public class UserController {
      * @param gender    性别：0 女 1 男 2 保密
      * @return
      */
-    @PostMapping("/user/info/update")
+    @PostMapping("/info/update")
     public CustomResponse updateUserInfo(@RequestParam("nickname") String nickname,
                                          @RequestParam("description") String desc,
                                          @RequestParam("gender") Integer gender) {
@@ -46,7 +44,7 @@ public class UserController {
      * @param file  头像文件
      * @return  成功则返回新头像url
      */
-    @PostMapping("/user/avatar/update")
+    @PostMapping("/avatar/update")
     public CustomResponse updateUserAvatar(@RequestParam("file") MultipartFile file) {
         Integer uid = currentUser.getUserId();
         try {
@@ -57,7 +55,7 @@ public class UserController {
         }
     }
 
-    @GetMapping("/user/info/get-one")
+    @GetMapping("/info/get-one")
     public CustomResponse getOneUserInfo(@RequestParam("uid") Integer uid) {
         CustomResponse customResponse = new CustomResponse();
         customResponse.setData(userService.getUserById(uid));

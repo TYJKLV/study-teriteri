@@ -44,7 +44,11 @@ public class ChatDetailedServiceImpl implements ChatDetailedService {
             return map;
         }
         QueryWrapper<ChatDetailed> queryWrapper = new QueryWrapper<>();
-        queryWrapper.in("id", set);
+        // 当前用户删除过的消息不返回；已撤回的消息不返回
+        queryWrapper.in("id", set)
+                .and(wrapper -> wrapper.eq("user_id", aid).ne("user_del", 1)
+                        .or().eq("another_id", aid).ne("another_del", 1))
+                .ne("withdraw", 1);
         map.put("list", chatDetailedMapper.selectList(queryWrapper));
         return map;
     }

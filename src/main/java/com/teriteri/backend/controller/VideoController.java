@@ -2,6 +2,7 @@ package com.teriteri.backend.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.teriteri.backend.mapper.FavoriteVideoMapper;
+import com.teriteri.backend.mapper.VideoMapper;
 import com.teriteri.backend.pojo.CustomResponse;
 import com.teriteri.backend.pojo.FavoriteVideo;
 import com.teriteri.backend.pojo.Video;
@@ -27,6 +28,9 @@ public class VideoController {
 
     @Autowired
     private FavoriteVideoMapper favoriteVideoMapper;
+
+    @Autowired
+    private VideoMapper videoMapper;
 
     @Autowired
     private RedisUtil redisUtil;
@@ -148,7 +152,24 @@ public class VideoController {
 
     @GetMapping("/video/user-works-count")
     public CustomResponse getUserWorksCount(@RequestParam("uid") Integer uid) {
-        return new CustomResponse(200, "OK", redisUtil.zCard("user_video_upload:" + uid));
+        // 直接查数据库。原来读的是 Redis 的 user_video_upload zset，那份派生数据只在"审核通过"时
+        // 写入一次且没有重建机制，Redis 一丢投稿数就变 0（个人主页导航栏的"投稿 N"就是它）。
+        QueryWrapper<Video> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq("uid", uid).eq("status", 1);
+        return new CustomResponse(200, "OK", videoMapper.selectCount(queryWrapper));
+    }
+
+    /**
+     * 获取当前登录用户自己的全部稿件（创作中心-稿件管理用）
+     * 与 /video/user-works 的区别：这里包含审核中、未通过等尚未公开的稿件，且只能查自己
+     * @return 稿件列表，每项含视频、用户、分区、统计数据
+     */
+    @GetMapping("/video/user-manuscripts")
+    public CustomResponse getUserManuscripts() {
+        CustomResponse customResponse = new CustomResponse();
+        Integer uid = currentUser.getUserId();
+        customResponse.setData(videoService.getUserManuscripts(uid));
+        return customResponse;
     }
 
     /**
@@ -166,18 +187,23 @@ public class VideoController {
                                        @RequestParam("quantity") Integer quantity) {
         CustomResponse customResponse = new CustomResponse();
         Map<String, Object> map = new HashMap<>();
-        Set<Object> set = redisUtil.zReverange("user_video_upload:" + uid, 0, -1);
-        if (set == null || set.isEmpty()) {
+        // 直接查数据库。这里原先读 Redis 的 user_video_upload zset，而那份派生索引没有任何重建机制
+        // （对比 video_status:* 有定时任务兜底），Redis 一重启丢数据，"用户投稿"页就会整页空白。
+        // MySQL 才是权威源，少一份副本就少一处可能不一致。
+        QueryWrapper<Video> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq("uid", uid).eq("status", 1).orderByDesc("upload_date").select("vid");
+        List<Object> vidList = videoMapper.selectObjs(queryWrapper);
+        if (vidList == null || vidList.isEmpty()) {
             map.put("count", 0);
             map.put("list", Collections.emptyList());
             customResponse.setData(map);
             return customResponse;
         }
         List<Integer> list = new ArrayList<>();
-        set.forEach(vid -> {
+        vidList.forEach(vid -> {
             list.add((Integer) vid);
         });
-        map.put("count", set.size());
+        map.put("count", list.size());
         switch (rule) {
             case 1:
                 map.put("list", videoService.getVideosWithDataByIdsOrderByDesc(list, "upload_date", page, quantity));
@@ -260,7 +286,7 @@ public class VideoController {
         CustomResponse customResponse = new CustomResponse();
         Set<Object> set;
         if (rule == 1) {
-            set = redisUtil.zReverange("favorite_video:" + fid, (long) (page - 1) * quantity, (long) page * quantity);
+            set = redisUtil.zReverange("favorite_video:" + fid, (long) (page - 1) * quantity, (long) page * quantity - 1);
         } else {
             set = redisUtil.zReverange("favorite_video:" + fid, 0, -1);
         }

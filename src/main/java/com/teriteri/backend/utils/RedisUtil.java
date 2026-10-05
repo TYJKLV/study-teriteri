@@ -28,6 +28,8 @@ public class RedisUtil {
     @Autowired
     private RedisTemplate redisTemplate;
 
+
+    // 默认过期时间， 60min
     public static final long REDIS_DEFAULT_EXPIRE_TIME = 60 * 60;
     public static final TimeUnit REDIS_DEFAULT_EXPIRE_TIMEUNIT = TimeUnit.SECONDS;
 

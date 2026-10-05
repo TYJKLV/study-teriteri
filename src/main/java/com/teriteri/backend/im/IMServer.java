@@ -11,17 +11,32 @@ import io.netty.handler.codec.http.HttpObjectAggregator;
 import io.netty.handler.codec.http.HttpServerCodec;
 import io.netty.handler.codec.http.websocketx.WebSocketServerProtocolHandler;
 import io.netty.handler.stream.ChunkedWriteHandler;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
+@Slf4j
 @Component
-public class IMServer {
+public class IMServer implements CommandLineRunner {
 
     // 存储每个用户的全部连接
     public static final Map<Integer, Set<Channel>> userChannel = new ConcurrentHashMap<>();
+
+    @Override
+    public void run(String... args) {
+        new Thread(() -> {
+            try {
+                start();
+                log.info("Netty WebSocket IM 服务器启动成功，监听端口 7071");
+            } catch (Exception e) {
+                log.error("Netty WebSocket IM 服务器启动失败", e);
+            }
+        }, "IMServer-Bootstrap").start();
+    }
 
     public void start() throws InterruptedException {
 

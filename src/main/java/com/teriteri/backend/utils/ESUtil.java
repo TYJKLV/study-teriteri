@@ -1,6 +1,7 @@
 package com.teriteri.backend.utils;
 
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
+import co.elastic.clients.elasticsearch._types.ElasticsearchException;
 import co.elastic.clients.elasticsearch._types.query_dsl.Operator;
 import co.elastic.clients.elasticsearch._types.query_dsl.Query;
 import co.elastic.clients.elasticsearch.core.CountRequest;
@@ -48,6 +49,16 @@ public class ESUtil {
         } catch (IOException e) {
             log.error("删除ElasticSearch视频文档时失败了：" + e);
             throw e;
+        } catch (ElasticsearchException e) {
+            // 文档本就不存在（ES 曾经不可用 / 索引漏建留下的历史欠账）时，删除对它而言等价于成功。
+            // 不放过 404 的话，用户会因为一条 ES 里根本没有的稿件而永远撤销不掉，
+            // 且异常会连带整个事务回滚。删除是幂等操作，404 直接放行。
+            if (e.status() == 404) {
+                log.warn("ES 中视频 {} 的文档本就不存在，跳过删除", vid);
+                return;
+            }
+            log.error("删除ElasticSearch视频文档时失败了：" + e);
+            throw e;
         }
     }
 
@@ -58,7 +69,8 @@ public class ESUtil {
     public void updateVideo(Video video) throws IOException {
         try {
             ESVideo esVideo = new ESVideo(video.getVid(), video.getUid(), video.getTitle(), video.getMcId(), video.getScId(), video.getTags(), video.getStatus());
-            client.update(u -> u.index("video").id(video.getVid().toString()).doc(esVideo), ESVideo.class);
+            // docAsUpsert：文档不存在时（如索引漏建、ES 曾不可用）直接按完整文档写入，避免 document_missing_exception 导致审核失败
+            client.update(u -> u.index("video").id(video.getVid().toString()).doc(esVideo).docAsUpsert(true), ESVideo.class);
         } catch (IOException e) {
             log.error("更新ElasticSearch视频文档时出错了：" + e);
             throw e;
@@ -155,7 +167,8 @@ public class ESUtil {
     public void updateUser(User user) throws IOException {
         try {
             ESUser esUser = new ESUser(user.getUid(), user.getNickname());
-            client.update(u -> u.index("user").id(user.getUid().toString()).doc(esUser), ESUser.class);
+            // 同 updateVideo，文档缺失时兜底写入
+            client.update(u -> u.index("user").id(user.getUid().toString()).doc(esUser).docAsUpsert(true), ESUser.class);
         } catch (IOException e) {
             log.error("更新ElasticSearch用户文档时出错了：" + e);
             throw e;

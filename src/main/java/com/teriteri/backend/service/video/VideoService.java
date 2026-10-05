@@ -44,6 +44,14 @@ public interface VideoService {
     List<Map<String, Object>> getVideosWithDataByIdList(List<Integer> list);
 
     /**
+     * 获取某个用户自己的全部稿件（创作中心-稿件管理），包含审核中、未通过等未公开的稿件，
+     * 已删除（status=3）的不再返回
+     * @param uid 用户ID
+     * @return 稿件列表，每项含视频、用户、分区、统计数据
+     */
+    List<Map<String, Object>> getUserManuscripts(Integer uid);
+
+    /**
      * 更新视频状态，包括过审、不通过、删除，其中审核相关需要管理员权限，删除可以是管理员或者投稿用户
      * @param vid   视频ID
      * @param status 要修改的状态，1通过 2不通过 3删除

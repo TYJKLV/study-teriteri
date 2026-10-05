@@ -55,7 +55,8 @@ public class RedisConfig extends CachingConfigurerSupport {
     }
 
     /**
-     * 缓存键生成器，在这个项目中用不到，我更倾向自己手动命名，如 user:1:age
+     * 缓存键生成器，配合 Spring Cache 注解使用
+     * 在这个项目中用不到，我更倾向自己手动命名，如 user:1:age
      * @return
      */
     @Bean

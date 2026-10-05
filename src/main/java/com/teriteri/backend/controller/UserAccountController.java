@@ -3,6 +3,7 @@ package com.teriteri.backend.controller;
 import com.teriteri.backend.pojo.CustomResponse;
 import com.teriteri.backend.service.user.UserAccountService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
@@ -10,6 +11,7 @@ import java.util.Map;
 @RestController
 public class UserAccountController {
 
+    @Qualifier("userAccountServiceImpl")
     @Autowired
     private UserAccountService userAccountService;
 

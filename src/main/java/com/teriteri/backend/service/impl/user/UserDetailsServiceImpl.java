@@ -10,6 +10,10 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 
+/**
+ * 中间类，为 UserDetailsImpl提供服务
+ */
+
 @Slf4j
 @Service
 public class UserDetailsServiceImpl implements UserDetailsService {
@@ -22,11 +26,11 @@ public class UserDetailsServiceImpl implements UserDetailsService {
         QueryWrapper<User> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq("username", username);
         queryWrapper.ne("state", 2);
-        User user = userMapper.selectOne(queryWrapper);
+        User user = userMapper.selectOne(queryWrapper); // 将 QueryWrapper 转换为 sql -> 数据库，并将返回的一行数据映射为 User对象
+        // 若 返回结果 > 1行，报错
         if (user == null) {
             return null;
         }
-
         return new UserDetailsImpl(user);
     }
 }

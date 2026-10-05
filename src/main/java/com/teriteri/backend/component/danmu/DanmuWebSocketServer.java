@@ -20,7 +20,6 @@ import javax.websocket.*;
 import javax.websocket.server.PathParam;
 import javax.websocket.server.ServerEndpoint;
 import java.util.Date;
-import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -55,13 +54,7 @@ public class DanmuWebSocketServer {
      */
     @OnOpen
     public void onOpen(Session session, @PathParam("vid") String vid) {
-        if (videoConnectionMap.get(vid) == null) {
-            Set<Session> set = new HashSet<>();
-            set.add(session);
-            videoConnectionMap.put(vid, set);
-        } else {
-            videoConnectionMap.get(vid).add(session);
-        }
+        videoConnectionMap.computeIfAbsent(vid, k -> ConcurrentHashMap.newKeySet()).add(session);
         sendMessage(vid, "当前观看人数" + videoConnectionMap.get(vid).size());
 //        System.out.println("建立连接，当前观看人数: " + videoConnectionMap.get(vid).size());
     }
@@ -90,8 +83,8 @@ public class DanmuWebSocketServer {
                 return;
             }
             String userId = JwtUtil.getSubjectFromToken(token);
-            String role = JwtUtil.getClaimFromToken(token, "role");
-            User user = redisUtil.getObject("security:" + role + ":" + userId, User.class);
+            String channel = JwtUtil.getClaimFromToken(token, "channel");
+            User user = redisUtil.getObject("security:" + channel + ":" + userId, User.class);
             if (user == null) {
                 session.getBasicRemote().sendText("登录已过期");
                 return;
@@ -100,11 +93,16 @@ public class DanmuWebSocketServer {
             // 写库
             JSONObject data = msg.getJSONObject("data");
 //            System.out.println(data);
+            String content = data.getString("content");
+            if (content != null && content.length() > 100) {
+                // 数据库弹幕内容列最长100字符，超长部分截断
+                content = content.substring(0, 100);
+            }
             Danmu danmu = new Danmu(
                     null,
                     Integer.parseInt(vid),
                     user.getUid(),
-                    data.getString("content"),
+                    content,
                     data.getInteger("fontsize"),
                     data.getInteger("mode"),
                     data.getString("color"),
@@ -132,13 +130,15 @@ public class DanmuWebSocketServer {
     @OnClose
     public void onClose(Session session, @PathParam("vid") String vid) {
         // 从缓存中移除连接记录
-        videoConnectionMap.get(vid).remove(session);
-        if (videoConnectionMap.get(vid).size() == 0) {
+        Set<Session> set = videoConnectionMap.get(vid);
+        if (set == null) return;
+        set.remove(session);
+        if (set.size() == 0) {
             // 如果没人了就直接移除这个视频
-            videoConnectionMap.remove(vid);
+            videoConnectionMap.remove(vid, set);
         } else {
             // 否则更新在线人数
-            sendMessage(vid, "当前观看人数" + videoConnectionMap.get(vid).size());
+            sendMessage(vid, "当前观看人数" + set.size());
         }
 //        System.out.println("关闭连接，当前观看人数: " + videoConnectionMap.get(vid).size());
     }
