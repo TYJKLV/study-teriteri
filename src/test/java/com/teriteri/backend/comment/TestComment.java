@@ -32,6 +32,13 @@ public class TestComment {
 
     @Test
     public void test1(){
+        int a = 189;
+        int b = 189;
+        String a1 = "a";
+        String a2 = "a";
+        System.out.println(a == b);
+        System.out.println(a1 == a2);
+        System.out.println(a1.equals(a2));
     }
 
 

@@ -16,6 +16,10 @@ import java.util.concurrent.TimeUnit;
 import static com.teriteri.backend.utils.ConstantsUtil.JWT_KEY;
 import static com.teriteri.backend.utils.ConstantsUtil.JWT_TTL;
 
+
+/**
+ * 生成 token、解析 token、校验 token
+ */
 @Component
 @Slf4j
 public class JwtUtil {
@@ -36,8 +40,17 @@ public class JwtUtil {
      * @return 加密后的token密钥
      */
     public static SecretKey getTokenSecret() {
+        // 将 JWT_KEY经过 Base64解码获得 字节数组
         byte[] encodeKey = Base64.getDecoder().decode(JWT_KEY);
         return new SecretKeySpec(encodeKey, 0, encodeKey.length, "HmacSHA256");
+
+        /*
+        * 1.直接将一个符合 HS256算法长度的字符串 转为 字符数组作为 密钥不行吗？
+        *   理论上是可行的，只不过不推荐而已
+        *   相较于现在的模式，即 拿着一个被 Base64编码后的字符串，在 getTokenSecret()中经过 Base64解码，并转换为 字符数粗作为 密钥
+        *   JWT_KEY 明面上是 无序的，随机的
+         */
+
     }
 
     /**
@@ -55,10 +68,11 @@ public class JwtUtil {
         long expMillis = nowMillis + JWT_TTL * 1000L;
         Date expDate = new Date(expMillis);
 
+        // 下面这么多的字段，除了 signWith外，其它都算是 PayLoad中的内容
         String token = Jwts.builder()
                 .setId(uuid)    // 随机id，用于生成无规则token
                 .setSubject(uid)    // 加密主体
-                .claim("channel", channel)    // token登录渠道参数 user/admin 用于区分客户端和管理端
+                .claim("channel", channel)    // token登录渠道参数 user/admin 用于区分客户端和管理端，是自定义字段，其它是 jwt的标准字段
                 .setIssuer("https://api.teriteri.fun")      // 发行方  都是用来验证token合法性的，可以不设置，
                 .setAudience("https://www.teriteri.fun")    // 接收方  本项目也没有额外用来验证合法性的逻辑
                 .signWith(secretKey, signatureAlgorithm)
@@ -76,8 +90,9 @@ public class JwtUtil {
     }
 
     /**
-     * 获取Claims信息
-     * @param token token
+     * 获取Claims信息，Claims是一个 Map结构，里面的内容是 createToken() 中装进 payload的所有字段
+     * 其余的 getXXFromToken, 都是调用 此方法，去获取到其中的某个字段
+     * @param token
      * @return token的claims
      */
     public static Claims getAllClaimsFromToken(String token) {
@@ -89,7 +104,7 @@ public class JwtUtil {
             claims = Jwts.parserBuilder()
                     .setSigningKey(getTokenSecret())
                     .build()
-                    .parseClaimsJws(token)
+                    .parseClaimsJws(token)  //此方法内部，不仅会比对 签名，也会 校验过期时间
                     .getBody();
         } catch (ExpiredJwtException eje) {
             claims = null;
@@ -99,6 +114,34 @@ public class JwtUtil {
 //            log.error("获取token信息失败", e);
         }
         return claims;
+    }
+
+
+    /**
+     * 校验传送来的token和缓存的token是否一致
+     * @param token token
+     * @return true/false
+     */
+    public boolean verifyToken(String token) {
+        Claims claims = getAllClaimsFromToken(token);
+        if (null == claims) {
+            return false;
+        }
+        String uid = claims.getSubject();
+        String channel;
+        if (claims.containsKey("channel")) {
+            channel = claims.get("channel").toString();
+        } else {
+            channel = "";
+        }
+        String cacheToken;
+        try {
+            cacheToken = String.valueOf(redisUtil.getValue("token:" + channel + ":" + uid));
+        } catch (Exception e) {
+            cacheToken = null;
+            log.error("获取不到缓存的token", e);
+        }
+        return StringUtils.equals(token, cacheToken);
     }
 
     /**
@@ -237,32 +280,5 @@ public class JwtUtil {
             return claims.get(param).toString();
         }
         return "";
-    }
-
-    /**
-     * 校验传送来的token和缓存的token是否一致
-     * @param token token
-     * @return true/false
-     */
-    public boolean verifyToken(String token) {
-        Claims claims = getAllClaimsFromToken(token);
-        if (null == claims) {
-            return false;
-        }
-        String uid = claims.getSubject();
-        String channel;
-        if (claims.containsKey("channel")) {
-            channel = claims.get("channel").toString();
-        } else {
-            channel = "";
-        }
-        String cacheToken;
-        try {
-            cacheToken = String.valueOf(redisUtil.getValue("token:" + channel + ":" + uid));
-        } catch (Exception e) {
-            cacheToken = null;
-            log.error("获取不到缓存的token", e);
-        }
-        return StringUtils.equals(token, cacheToken);
     }
 }

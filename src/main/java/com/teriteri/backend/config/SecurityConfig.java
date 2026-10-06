@@ -5,7 +5,6 @@ import com.teriteri.backend.utils.ConstantsUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -21,10 +20,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
-
 import javax.annotation.Resource;
-import java.awt.geom.FlatteningPathIterator;
-import java.util.Objects;
 
 @Slf4j
 // @Configuration  @EnableWebSecurity中，已有此注解
@@ -67,7 +63,7 @@ public class SecurityConfig {
     /**
      * 用户名和密码验证
      * @return Authentication对象
-     * 当登录接口中的调用 authenticationProvider.authenticate()，最终便会走到这里
+     * 调用 authenticationProvider.authenticate()，便会走到这里
      */
     @Bean
     public AuthenticationProvider authenticationProvider() {

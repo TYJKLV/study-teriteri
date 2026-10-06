@@ -26,6 +26,7 @@ public class RedisConfig extends CachingConfigurerSupport {
     /**
      * 缓存键生成器，配合 Spring Cache 注解使用
      * 在这个项目中用不到，我更倾向自己手动命名，如 user:1:age
+     *
      * @return
      */
     @Bean
@@ -103,14 +104,19 @@ public class RedisConfig extends CachingConfigurerSupport {
         return template;
     }
 
+
+
     /**
-     * 一个专门用于操作 Redis 字符串类型的模板，它是 RedisTemplate 的子类，只支持字符串数据的存储和检索
-     *
-     * @param factory
-     * @return
+     *  1. 下面这段代码没有写的必要性，因为 当我们引入 spring-boot-starter-data-redis 依赖后，
+     *      Spring Boot 的 RedisAutoConfiguration 就会自动创建两个 Bean：RedisTemplate、StringRedisTemplate
+     *      而当我们自己声明定义了 对应的Bean，就会优先用我们的
+     *  2. 为什么重写 RedisTempalte
+     *      因为 序列化默认是 JDK序列化，不是我们需要的；
+     *      而 StringRedisTemplate默认是 String序列化，也就是 StringRedisSerializer，是我们需要的
      */
     @Bean
     @SuppressWarnings("all")
+    //一个专门用于操作 Redis 字符串类型的模板，它是 RedisTemplate 的子类，只支持字符串数据的存储和检索
     public StringRedisTemplate stringRedisTemplate(RedisConnectionFactory factory) {
         StringRedisTemplate stringRedisTemplate = new StringRedisTemplate();
         stringRedisTemplate.setConnectionFactory(factory);
