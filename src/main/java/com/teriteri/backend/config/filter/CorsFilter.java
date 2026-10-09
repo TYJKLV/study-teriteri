@@ -1,5 +1,7 @@
 package com.teriteri.backend.config.filter;
 
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
 import javax.servlet.*;
@@ -9,6 +11,7 @@ import java.io.IOException;
 
 
 // 这个 Filter基本没用，若是 从安全性考虑，没有丝毫安全性；若是从可用性考虑，这段代码旨在解决 跨域问题，但 不存在跨域，因为 前端做了 处理
+@Order(Ordered.HIGHEST_PRECEDENCE)
 @Component
 public class CorsFilter implements Filter {
     @Override

@@ -12,6 +12,10 @@ import org.springframework.stereotype.Service;
 
 /**
  * 中间类，为 UserDetailsImpl提供服务
+ *
+ * SecurityConfig 中的 authenticate()手动调用 loadUserByUsername()，因为我们自己 new 了一个 AuthenticationProvider
+ * 若 我们没有new 这个对象，那么 loadUserByUsername()也会被调用
+ * 被 默认的 AuthenticationProvider实现类  DaoAuthenticationProvider 中的 retrieveUser()
  */
 
 @Slf4j

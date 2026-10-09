@@ -5,12 +5,12 @@ import com.teriteri.backend.utils.ConstantsUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
@@ -23,12 +23,18 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import javax.annotation.Resource;
 
 @Slf4j
-// @Configuration  @EnableWebSecurity中，已有此注解
-@EnableWebSecurity  //可以往里面看到，引入一些.class文件，以及 其它的注解，目的：激活 Spring Security 的 Web 安全功能
+/**
+ * 下面这两个注解，只开启一个就可以了：
+ * 1. 必须有 @Configuration
+ * 2. @EnableWebSecurity 中 有 @Configuration
+ * 3. @EnableWebSecurity 作用之一：激活Spring Security的Web 安全功能，但在 Spring Boot + Security中默认开启了
+ */
+@Configuration
+// @EnableWebSecurity  //可以往里面看到，引入一些.class文件，以及 其它的注解，目的：激活 Spring Security 的 Web 安全功能
 public class SecurityConfig {
 
     @Resource  // 多个实现类，因此用这个
-    private UserDetailsService userDetailsService;
+    private UserDetailsService userDetailsServiceImpl;
 
     @Resource
     private JwtAuthenticationTokenFilter jwtAuthenticationTokenFilter;
@@ -74,7 +80,7 @@ public class SecurityConfig {
                 String username = authentication.getName();
                 String password = authentication.getCredentials().toString();
 
-                UserDetails loginUser = userDetailsService.loadUserByUsername(username);
+                UserDetails loginUser = userDetailsServiceImpl.loadUserByUsername(username);
                 if (loginUser == null || !passwordEncoder().matches(password, loginUser.getPassword())) {
                     // 密码匹配失败抛出异常
                     throw new BadCredentialsException("访问拒绝：用户名或密码错误！");
@@ -104,7 +110,8 @@ public class SecurityConfig {
                 // 基于 token，不需要 csrf
                 .csrf().disable()
                 // 基于 token，不需要 session
-                .sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS).and()
+                .sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+                .and()
                 // 下面开始设置权限
                 .authorizeRequests(authorize -> authorize
                         // 请求放开接口  toArray()：将 Lise -> String数组   permitAll()：哪些路径是允许公开访问的
