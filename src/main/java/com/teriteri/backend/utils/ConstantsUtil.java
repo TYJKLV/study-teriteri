@@ -45,5 +45,4 @@ public class ConstantsUtil {
     public static final long JWT_TTL = 60 * 60 * 24 * 2; //单位为 秒，则表示 2天
     // JWT_KEY: Base64编码后的字符
     public static final String JWT_KEY = "VGlhbll1SmllMjAwNTA4MzBpa194ejA4MDZrTG92ZU1l"; //44个，换算成 Base64，就是 264bit > 256bit
-
 }

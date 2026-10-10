@@ -186,7 +186,7 @@ public class UserAccountServiceImpl implements UserAccountService {
         //将用户名和密码封装成一个类，这个类不会存明文了，将是加密后的字符串
         UsernamePasswordAuthenticationToken authenticationToken =
                 new UsernamePasswordAuthenticationToken(username, password);
-                //该构造器，authenticated默认为 false，表示还没有进行 认证
+        //该构造器，authenticated默认为 false，表示还没有进行 认证
 
         // 用户名或密码错误会抛出异常
         Authentication authenticate;
@@ -231,7 +231,7 @@ public class UserAccountServiceImpl implements UserAccountService {
         // 每次登录顺便返回user信息，就省去再次发送一次获取用户个人信息的请求
         UserDTO userDTO = new UserDTO();
         // tk：
-        BeanUtils.copyProperties(user,userDTO); //将 user对应字段 拷贝到 userDTO中
+        BeanUtils.copyProperties(user, userDTO); //将 user对应字段 拷贝到 userDTO中
 /*      userDTO.setUid(user.getUid());
         userDTO.setNickname(user.getNickname());
         userDTO.setAvatar(user.getAvatar());
@@ -302,7 +302,7 @@ public class UserAccountServiceImpl implements UserAccountService {
         }
         // 每次登录顺便返回user信息，就省去再次发送一次获取用户个人信息的请求
         UserDTO userDTO = new UserDTO();
-        BeanUtils.copyProperties(user,userDTO);
+        BeanUtils.copyProperties(user, userDTO);
 
         Map<String, Object> final_map = new HashMap<>();
         final_map.put("token", token);
@@ -324,18 +324,22 @@ public class UserAccountServiceImpl implements UserAccountService {
 
         CustomResponse customResponse = new CustomResponse();
         // 检查账号状态，1 表示封禁中，不允许登录，2表示账号注销了
-        if (userDTO.getState() == 2) {
+        Integer state = userDTO.getState();
+
+        if(Objects.equals(state,2)){          // if (state == 2) // 取代这种写法，因为 state可能为 null
             customResponse.setCode(404);
             customResponse.setMessage("账号已注销");
             return customResponse;
         }
-        if (userDTO.getState() == 1) {
+
+        if (Objects.equals(state,1)) {
             customResponse.setCode(403);
             customResponse.setMessage("账号异常，封禁中");
             return customResponse;
         }
 
         customResponse.setData(userDTO);
+
         return customResponse;
     }
 
