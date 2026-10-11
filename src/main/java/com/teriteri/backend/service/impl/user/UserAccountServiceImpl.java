@@ -364,35 +364,27 @@ public class UserAccountServiceImpl implements UserAccountService {
         CustomResponse customResponse = new CustomResponse();
 
         // 普通用户无权访问
-        if (user.getRole() == 0) {
+        if (Objects.equals(user.getRole(),0)) {
             customResponse.setCode(403);
             customResponse.setMessage("您不是管理员，无权访问");
             return customResponse;
         }
+
+        Integer state = user.getState();
         // 检查账号状态，1 表示封禁中，不允许登录，2表示已注销
-        if (user.getState() == 2) {
+        if (Objects.equals(state,2)) {
             customResponse.setCode(404);
             customResponse.setMessage("账号已注销");
             return customResponse;
         }
-        if (user.getState() == 1) {
+        if (Objects.equals(state,1)) {
             customResponse.setCode(403);
             customResponse.setMessage("账号异常，封禁中");
             return customResponse;
         }
         UserDTO userDTO = new UserDTO();
-        userDTO.setUid(user.getUid());
-        userDTO.setNickname(user.getNickname());
-        userDTO.setAvatar(user.getAvatar());
-        userDTO.setBackground(user.getBackground());
-        userDTO.setGender(user.getGender());
-        userDTO.setDescription(user.getDescription());
-        userDTO.setExp(user.getExp());
-        userDTO.setCoin(user.getCoin());
-        userDTO.setVip(user.getVip());
-        userDTO.setState(user.getState());
-        userDTO.setAuth(user.getAuth());
-        userDTO.setAuthMsg(user.getAuthMsg());
+        // 使用 BeanUtils.copyProperties() api来替代一长串的 setter方法
+        BeanUtils.copyProperties(user,userDTO);
         customResponse.setData(userDTO);
         return customResponse;
     }
@@ -407,6 +399,9 @@ public class UserAccountServiceImpl implements UserAccountService {
         redisUtil.delValue("token:user:" + LoginUserId);
         redisUtil.delValue("security:user:" + LoginUserId);
         redisUtil.delMember("login_member", LoginUserId);   // 从在线用户集合中移除
+
+
+        // TODO 不太清楚，这个是在哪里写入 Redis的
         redisUtil.deleteKeysWithPrefix("whisper:" + LoginUserId + ":"); // 清除全部在聊天窗口的状态
 
         // 断开全部该用户的channel 并从 userChannel 移除该用户

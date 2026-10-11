@@ -17,7 +17,8 @@ public class UserDetailsImpl implements UserDetails {
     private User user;
 
 
-    //TODO  getAuthorities()有什么用
+    // getAuthorities()有什么用？
+    // 从 UserDetails继承过来的，是 spring security的权限判定，只不过 我们项目中不使用
     /*
         本项目不使用 Spring Security 的角色注解来控制权限
         是  Spring Security 的权限抽象，通常有  ROLE_USER、ROLE_ADMIN
@@ -39,8 +40,12 @@ public class UserDetailsImpl implements UserDetails {
     }
 
 
-    // TODO 下面四个默认实现返回 false，为什么手动修改为 true，这四个有什么用
-    // 我简单解释一下： 在当前代码中并没有使用到
+    /*下面四个默认实现返回 false，为什么手动修改为 true，这四个有什么用 ？
+        1. 我们手动编写了 AuthenticationProvider的实现类，因此，这四个方法其实 返回 false or true，无所谓
+        2. 之所以返回 true，更多就是因为 无所谓，所以，返回true；当 维护者想要 修改实现类时，也更为 方便
+    */
+
+
     /*
     由于在 SecurityConfig.java中，手动配置了 @Bean，作为 AuthenticationProvider接口的实现类，导致
     默认的 实现类 没有注入到 该接口中，手动注入的实现类是： 匿名内部类

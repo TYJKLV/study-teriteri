@@ -126,17 +126,3 @@ public class SecurityConfig {
                 .build();
     }
 }
-
-
-// TODO
-/**
- * 具体调用链：当登录接口中的调用 authenticationProvider.authenticate()，最终便会走到这里
- * authenticationProvider() 写的是否规范，以及 返回了一个 UsernamePasswordAuthenticationToken对象，为什么选这个
- * supports() 这个方法什么时候会被调用，没看懂
- * .csrf().disable()：关闭 CSRF，具体体现是什么，即 浏览器是否照旧有 跨域限制呢
- * .sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS)：告诉 Spring Security：不要创建 HttpSession，不要依赖 Session
- * 上面这两个若是不写，默认便是开启的吗，会存在什么问题吗，对我们现有项目
- * .addFilterBefore():把 JWT过滤器 放在 UsernamePasswordAuthenticationFilter 过滤器之前，这个Username开头的过滤器我们设置了吗，在哪里设置的，有必要吗
- * 整个过滤器链是什么，所有过滤器都在这个文件中了 对吗
- * 以及 这个技术是什么？为什么采用这个技术，它解决了什么问题，它怎么解决的，它带来了新的问题吗(针对于这个文件的所有内容)，即
- */

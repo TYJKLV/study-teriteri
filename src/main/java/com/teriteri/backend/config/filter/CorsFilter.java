@@ -16,8 +16,8 @@ import java.io.IOException;
 public class CorsFilter implements Filter {
     @Override
     public void doFilter(ServletRequest req, ServletResponse res, FilterChain chain) throws IOException, ServletException {
-        // TODO
-        // 这里必须进行格式的转换吗，我不太理解
+        // 这里必须进行格式的转换吗
+        // 是的，必须要，因为有很多 http专属方法，是 ServletRequest没有的
         HttpServletResponse response = (HttpServletResponse) res;
         HttpServletRequest request = (HttpServletRequest) req;
 
