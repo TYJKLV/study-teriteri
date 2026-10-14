@@ -7,6 +7,7 @@ import com.teriteri.backend.pojo.IMResponse;
 import com.teriteri.backend.pojo.User;
 import com.teriteri.backend.utils.JwtUtil;
 import com.teriteri.backend.utils.RedisUtil;
+import io.jsonwebtoken.Jwt;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
@@ -19,23 +20,20 @@ import org.springframework.util.StringUtils;
 
 import java.util.HashSet;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
-@Component
 public class TokenValidationHandler extends SimpleChannelInboundHandler<TextWebSocketFrame> {
 
-    private static JwtUtil jwtUtil;
-    private static RedisUtil redisUtil;
+    private JwtUtil jwtUtil;
+    private RedisUtil redisUtil;
 
-    @Autowired
-    public void setDependencies(JwtUtil jwtUtil, RedisUtil redisUtil) {
-        TokenValidationHandler.jwtUtil = jwtUtil;
-        TokenValidationHandler.redisUtil = redisUtil;
+    public TokenValidationHandler(JwtUtil jwtUtil, RedisUtil redisUtil) {
+        this.jwtUtil = jwtUtil;
+        this.redisUtil = redisUtil;
     }
 
-    public TokenValidationHandler() {
-
-    }
+    public TokenValidationHandler() {}
 
     @Override
     public void channelRead0(ChannelHandlerContext ctx, TextWebSocketFrame tx) {
@@ -45,18 +43,25 @@ public class TokenValidationHandler extends SimpleChannelInboundHandler<TextWebS
         Integer uid = isValidToken(token);
         if (uid != null) {
             // 将uid绑到ctx上
-            ctx.channel().attr(AttributeKey.valueOf("userId")).set(uid);
-            // 将channel存起来
-            if (IMServer.userChannel.get(uid) == null) {
+            ctx.channel().attr(AttributeKey.valueOf("userId")).set(uid); // attribute: 属性，特质
+
+            // 这段 if/else 因为采用了 HashSet 进行 add()，存在并发风险；因此，使用 computeIfAbsent() 替代
+            /*if (IMServer.userChannel.get(uid) == null) {
                 Set<Channel> set = new HashSet<>();
                 set.add(ctx.channel());
                 IMServer.userChannel.put(uid, set);
             } else {
                 IMServer.userChannel.get(uid).add(ctx.channel());
-            }
+            }*/
+
+            // 将channel存起来
+            IMServer.userChannel
+                .computeIfAbsent(uid, k -> ConcurrentHashMap.newKeySet())
+                .add(ctx.channel());
+
             redisUtil.addMember("login_member", uid);   // 将用户添加到在线用户集合
-//            System.out.println("该用户的全部连接状态：" + IMServer.userChannel.get(uid));
-//            System.out.println("当前在线人数：" + IMServer.userChannel.size());
+            //  System.out.println("该用户的全部连接状态：" + IMServer.userChannel.get(uid));
+            //  System.out.println("当前在线人数：" + IMServer.userChannel.size());
             // 移除token验证处理器，以便以后使用无需判断
             ctx.pipeline().remove(TokenValidationHandler.class);
             // 保持消息的引用计数，以确保消息不会被释放

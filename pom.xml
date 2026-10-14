@@ -41,7 +41,7 @@
         </dependency>
 
         <dependency>
-        <!--简化代码，帮写什么get、setter函数-->
+            <!--简化代码，帮写什么get、setter函数-->
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
             <version>1.18.24</version>
@@ -117,11 +117,13 @@
             <version>1.5</version>
         </dependency>
 
-        <dependency>
+        <!-- commons-fileupload 依赖已包含 commons-io -->
+        <!-- <dependency>
             <groupId>commons-io</groupId>
             <artifactId>commons-io</artifactId>
             <version>2.13.0</version>
-        </dependency>
+        </dependency> -->
+
 
         <!--阿里云OSS对象存储-->
         <dependency>
@@ -156,11 +158,12 @@
             <version>4.1.66.Final</version>
         </dependency>
 
-        <dependency>
-            <groupId>io.netty</groupId>
-            <artifactId>netty-handler</artifactId>
-            <version>4.1.66.Final</version>
-        </dependency>
+        <!-- netty-all依赖，已经包含了 netty-handler；所以，引入这个多此一举 -->
+        <!--  <dependency>
+             <groupId>io.netty</groupId>
+             <artifactId>netty-handler</artifactId>
+             <version>4.1.66.Final</version>
+         </dependency> -->
 
         <!--        加入ssl证书认证-->
         <!--        <dependency>-->
@@ -209,10 +212,10 @@
             <scope>test</scope>
         </dependency>
 
-<!--        <dependency>-->
-<!--            <groupId>org.springframework.boot</groupId>-->
-<!--            <artifactId>spring-boot-starter-data-elasticsearch</artifactId>-->
-<!--        </dependency>-->
+        <!--        <dependency>-->
+        <!--            <groupId>org.springframework.boot</groupId>-->
+        <!--            <artifactId>spring-boot-starter-data-elasticsearch</artifactId>-->
+        <!--        </dependency>-->
     </dependencies>
 
     <build>

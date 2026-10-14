@@ -20,15 +20,15 @@ import java.util.Set;
 // TODO
 // 用到了 fastjson，待替换，看看是否可以解决
 @Slf4j
-@Component
 public class WebSocketHandler extends SimpleChannelInboundHandler<TextWebSocketFrame> {
 
-    private static RedisUtil redisUtil;
+    private RedisUtil redisUtil;
 
-    @Autowired
-    public void setDependencies(RedisUtil redisUtil) {
-        WebSocketHandler.redisUtil = redisUtil;
+    public WebSocketHandler(RedisUtil redisUtil) {
+        this.redisUtil = redisUtil;
     }
+
+    public WebSocketHandler(){}
 
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, TextWebSocketFrame tx) {
