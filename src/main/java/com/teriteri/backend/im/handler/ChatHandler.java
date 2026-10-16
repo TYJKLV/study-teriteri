@@ -50,7 +50,6 @@ public class ChatHandler {
     public void send(ChannelHandlerContext ctx, TextWebSocketFrame tx) {
         try {
             ChatDetailed chatDetailed = JSONObject.parseObject(tx.text(), ChatDetailed.class);
-//            System.out.println("接收到聊天消息：" + chatDetailed);
 
             // 从channel中获取当前用户id 封装写库
             Integer user_id = (Integer) ctx.channel().attr(AttributeKey.valueOf("userId")).get();
@@ -60,9 +59,11 @@ public class ChatHandler {
             chatDetailed.setWithdraw(0);
             chatDetailed.setTime(new Date());
             chatDetailedMapper.insert(chatDetailed);
-            // "chat_detailed_zset:对方:自己"
+
             redisUtil.zset("chat_detailed_zset:" + user_id + ":" + chatDetailed.getAnotherId(), chatDetailed.getId());
             redisUtil.zset("chat_detailed_zset:" + chatDetailed.getAnotherId() + ":" + user_id, chatDetailed.getId());
+            // TODO
+            // 涉及到 ChatServiceImpl，ChatHandler 现在并不能搞清楚
             boolean online = chatService.updateChat(user_id, chatDetailed.getAnotherId());
 
             // 转发到发送者和接收者的全部channel

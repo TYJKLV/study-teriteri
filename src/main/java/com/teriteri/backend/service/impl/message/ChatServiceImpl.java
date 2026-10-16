@@ -60,7 +60,7 @@ public class ChatServiceImpl implements ChatService {
     public Map<String, Object> createChat(Integer from, Integer to) {
         Map<String, Object> map = new HashMap<>();
         QueryWrapper<Chat> queryWrapper = new QueryWrapper<>();
-        queryWrapper.eq("user_id", from).eq("another_id", to);
+        queryWrapper.eq("user_id", to).eq("another_id", from);
         Chat chat = chatMapper.selectOne(queryWrapper);
         if (chat != null) {
             // 曾经创建过
@@ -74,7 +74,7 @@ public class ChatServiceImpl implements ChatService {
                 map.put("chat", chat);
                 Chat finalChat = chat;
                 CompletableFuture<Void> userFuture = CompletableFuture.runAsync(() -> {
-                    map.put("user", userService.getUserById(finalChat.getUserId()));
+                    map.put("user", userService.getUserById(finalChat.getAnotherId()));
                 }, taskExecutor);
                 CompletableFuture<Void> detailFuture = CompletableFuture.runAsync(() -> {
                     map.put("detail", chatDetailedService.getDetails(from, to, 0L));
@@ -99,14 +99,14 @@ public class ChatServiceImpl implements ChatService {
                 return map;
             }
             // 需新创建
-            chat = new Chat(null, from, to, 0, 0, new Date());
+            chat = new Chat(null, to, from, 0, 0, new Date());
             chatMapper.insert(chat);
             redisUtil.zset("chat_zset:" + to, chat.getId());    // 添加到这个用户的最近聊天的有序集合
             // 携带信息返回
             map.put("chat", chat);
             Chat finalChat = chat;
             CompletableFuture<Void> userFuture = CompletableFuture.runAsync(() -> {
-                map.put("user", userService.getUserById(finalChat.getUserId()));
+                map.put("user", userService.getUserById(finalChat.getAnotherId()));
             }, taskExecutor);
             CompletableFuture<Void> detailFuture = CompletableFuture.runAsync(() -> {
                 map.put("detail", chatDetailedService.getDetails(from, to, 0L));
@@ -144,11 +144,11 @@ public class ChatServiceImpl implements ChatService {
                     map.put("chat", chat);
 
                     CompletableFuture<Void> userFuture = CompletableFuture.runAsync(() -> {
-                        map.put("user", userService.getUserById(chat.getUserId()));
+                        map.put("user", userService.getUserById(chat.getAnotherId()));
                     }, taskExecutor);
 
                     CompletableFuture<Void> detailFuture = CompletableFuture.runAsync(() -> {
-                        map.put("detail", chatDetailedService.getDetails(chat.getUserId(), uid, 0L));
+                        map.put("detail", chatDetailedService.getDetails(chat.getAnotherId(), uid, 0L));
                     }, taskExecutor);
 
                     userFuture.join();
@@ -167,7 +167,7 @@ public class ChatServiceImpl implements ChatService {
     @Override
     public Chat getChat(Integer from, Integer to) {
         QueryWrapper<Chat> queryWrapper = new QueryWrapper<>();
-        queryWrapper.eq("user_id", from).eq("another_id", to);
+        queryWrapper.eq("user_id", to).eq("another_id", from);
         return chatMapper.selectOne(queryWrapper);
     }
 
@@ -179,7 +179,7 @@ public class ChatServiceImpl implements ChatService {
     @Override
     public void delChat(Integer from, Integer to) {
         QueryWrapper<Chat> queryWrapper = new QueryWrapper<>();
-        queryWrapper.eq("user_id", from).eq("another_id", to);
+        queryWrapper.eq("user_id", to).eq("another_id", from);
         Chat chat = chatMapper.selectOne(queryWrapper);
         if (chat == null) return;
 
@@ -203,7 +203,7 @@ public class ChatServiceImpl implements ChatService {
 
         // 更新字段伪删除 并清除未读
         UpdateWrapper<Chat> updateWrapper = new UpdateWrapper<>();
-        updateWrapper.eq("user_id", from).eq("another_id", to).setSql("is_deleted = 1").setSql("unread = 0");
+        updateWrapper.eq("user_id", to).eq("another_id", from).setSql("is_deleted = 1").setSql("unread = 0");
         chatMapper.update(null, updateWrapper);
 
         // 移出最近聊天集合
@@ -223,23 +223,23 @@ public class ChatServiceImpl implements ChatService {
     @Override
     public boolean updateChat(Integer from, Integer to) {
         // 查询对方是否在窗口
-        String key = "whisper:" + to + ":" + from;  // whisper:用户自己:聊天对象 这里的用户自己就是对方本人 聊天对象就是在发消息的我自己
+        String key = "whisper:" + to + ":" + from; // whisper:聊天对象:用户自己
         boolean online = redisUtil.isExist(key);
         try {
             /*
-             既然我要发消息给对方 那么 to -> from 的 chat 表数据一定是存在的 因为发消息前一定创建了聊天
-             所以只要判断 from -> to 的数据是否存在
+             既然我要发消息给对方 那么我自己的会话条目一定已存在（发消息前一定在聊天页创建过）
+             所以只需要判断/补建对方的会话条目
              */
 
             // 创建两个线程分别处理对应数据
             // 先更新 to -> from 的数据
             CompletableFuture<Void> future1 = CompletableFuture.runAsync(() -> {
                 QueryWrapper<Chat> queryWrapper1 = new QueryWrapper<>();
-                queryWrapper1.eq("user_id", to).eq("another_id", from);
+                queryWrapper1.eq("user_id", from).eq("another_id", to);
                 Chat chat1 = chatMapper.selectOne(queryWrapper1);
                 UpdateWrapper<Chat> updateWrapper1 = new UpdateWrapper<>();
-                updateWrapper1.eq("user_id", to)
-                        .eq("another_id", from)
+                updateWrapper1.eq("user_id", from)
+                        .eq("another_id", to)
                         .set("is_deleted", 0)
                         .set("latest_time", new Date());
                 chatMapper.update(null, updateWrapper1);
@@ -249,14 +249,14 @@ public class ChatServiceImpl implements ChatService {
             // 再查询 from -> to 的数据
             CompletableFuture<Void> future2 = CompletableFuture.runAsync(() -> {
                 QueryWrapper<Chat> queryWrapper2 = new QueryWrapper<>();
-                queryWrapper2.eq("user_id", from).eq("another_id", to);
+                queryWrapper2.eq("user_id", to).eq("another_id", from);
                 Chat chat2 = chatMapper.selectOne(queryWrapper2);
 
                 if (online) {
                     // 如果对方在窗口就不更新未读
                     if (chat2 == null) {
                         // 如果对方没聊过天 就创建聊天
-                        chat2 = new Chat(null, from, to, 0, 0, new Date());
+                        chat2 = new Chat(null, to, from, 0, 0, new Date());
                         chatMapper.insert(chat2);
                     } else {
                         // 如果聊过 就只更新时间和未移除
@@ -271,7 +271,7 @@ public class ChatServiceImpl implements ChatService {
                     // 如果不在窗口就未读+1
                     if (chat2 == null) {
                         // 如果对方没聊过天 就创建聊天
-                        chat2 = new Chat(null, from, to, 0, 1, new Date());
+                        chat2 = new Chat(null, to, from, 0, 1, new Date());
                         chatMapper.insert(chat2);
                     } else {
                         // 如果聊过 就更新未读和时间和未移除
@@ -306,12 +306,12 @@ public class ChatServiceImpl implements ChatService {
     public void updateWhisperOnline(Integer from, Integer to) {
         try {
             // 更新为在线状态
-            String key = "whisper:" + to + ":" + from;  // whisper:用户自己:聊天对象
+            String key = "whisper:" + to + ":" + from;
             redisUtil.setValue(key, true);
 
             // 清除未读
             QueryWrapper<Chat> queryWrapper = new QueryWrapper<>();
-            queryWrapper.eq("user_id", from).eq("another_id", to);
+            queryWrapper.eq("user_id", to).eq("another_id", from);
             Chat chat = chatMapper.selectOne(queryWrapper);
 
             if (chat.getUnread() > 0) {
@@ -332,7 +332,7 @@ public class ChatServiceImpl implements ChatService {
             }
 
             UpdateWrapper<Chat> updateWrapper = new UpdateWrapper<>();
-            updateWrapper.eq("user_id", from).eq("another_id", to).set("unread", 0);
+            updateWrapper.eq("user_id", to).eq("another_id", from).set("unread", 0);
             chatMapper.update(null, updateWrapper);
 
         } catch (Exception e) {
@@ -348,7 +348,7 @@ public class ChatServiceImpl implements ChatService {
     @Override
     public void updateWhisperOutline(Integer from, Integer to) {
         try {
-            String key = "whisper:" + to + ":" + from;  // whisper:用户自己:聊天对象
+            String key = "whisper:" + to + ":" + from;
             // 删除key更新为离开状态
             redisUtil.delValue(key);
         } catch (Exception e) {

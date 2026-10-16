@@ -53,8 +53,8 @@ DROP TABLE IF EXISTS `chat`;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `chat` (
   `id` int(11) NOT NULL AUTO_INCREMENT COMMENT '唯一主键',
-  `user_id` int(11) NOT NULL COMMENT '对象UID',
-  `another_id` int(11) NOT NULL COMMENT '用户UID',
+  `user_id` int(11) NOT NULL COMMENT '用户UID',
+  `another_id` int(11) NOT NULL COMMENT '对象UID',
   `is_deleted` tinyint(4) NOT NULL DEFAULT '0' COMMENT '是否移除聊天 0否 1是',
   `unread` int(11) NOT NULL DEFAULT '0' COMMENT '消息未读数量',
   `latest_time` datetime NOT NULL COMMENT '最近接收消息的时间或最近打开聊天窗口的时间',
