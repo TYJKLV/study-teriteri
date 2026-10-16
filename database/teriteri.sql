@@ -77,7 +77,7 @@ CREATE TABLE `chat_detailed` (
   `another_id` int(11) NOT NULL COMMENT '消息接收者',
   `content` varchar(500) NOT NULL COMMENT '消息内容',
   `user_del` tinyint(4) NOT NULL DEFAULT '0' COMMENT '发送者是否删除',
-  `another_del` tinyint(4) NOT NULL DEFAULT '0' COMMENT '接受者是否删除',
+  `another_del` tinyint(4) NOT NULL DEFAULT '0' COMMENT '接收者是否删除',
   `withdraw` tinyint(4) NOT NULL DEFAULT '0' COMMENT '是否撤回',
   `time` datetime NOT NULL COMMENT '消息发送时间',
   PRIMARY KEY (`id`),

@@ -217,7 +217,7 @@ public class ChatServiceImpl implements ChatService {
     /**
      * 发送消息时更新对应聊天的未读数和时间
      * @param from  发送者ID（自己）
-     * @param to    接受者ID（对方）
+     * @param to    接收者ID（对方）
      * @return 返回对方是否在窗口
      */
     @Override
