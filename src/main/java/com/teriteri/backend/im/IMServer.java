@@ -1,5 +1,6 @@
 package com.teriteri.backend.im;
 
+import com.teriteri.backend.im.handler.ChatHandler;
 import com.teriteri.backend.im.handler.TokenValidationHandler;
 import com.teriteri.backend.im.handler.WebSocketHandler;
 import com.teriteri.backend.utils.JwtUtil;
@@ -33,6 +34,8 @@ public class IMServer implements CommandLineRunner {
     private JwtUtil jwtUtil;
     @Autowired
     private RedisUtil redisUtil;
+    @Autowired
+    private ChatHandler chatHandler;
 
     @Override
     public void run(String... args) {
@@ -73,7 +76,7 @@ public class IMServer implements CommandLineRunner {
                                 .addLast(new TokenValidationHandler(jwtUtil,redisUtil))
                                 // 添加 WebSocket 支持
                                 .addLast(new WebSocketServerProtocolHandler("/im"))
-                                .addLast(new WebSocketHandler(redisUtil));
+                                .addLast(new WebSocketHandler(redisUtil,chatHandler));
 
                     }
                 });

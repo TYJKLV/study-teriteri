@@ -15,7 +15,6 @@ import io.netty.handler.codec.http.websocketx.TextWebSocketFrame;
 import io.netty.util.AttributeKey;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 import java.util.*;
@@ -26,31 +25,29 @@ import java.util.concurrent.Executor;
 @Component
 public class ChatHandler {
 
-    private static ChatService chatService;
-    private static ChatDetailedMapper chatDetailedMapper;
-    private static UserService userService;
-    private static RedisUtil redisUtil;
-    private static Executor taskExecutor;
+    @Autowired
+    private ChatService chatService;
 
     @Autowired
-    private void setDependencies(ChatService chatService,
-                                 ChatDetailedMapper chatDetailedMapper,
-                                 UserService userService,
-                                 RedisUtil redisUtil,
-                                 @Qualifier("taskExecutor") Executor taskExecutor) {
-        ChatHandler.chatService = chatService;
-        ChatHandler.chatDetailedMapper = chatDetailedMapper;
-        ChatHandler.userService = userService;
-        ChatHandler.redisUtil = redisUtil;
-        ChatHandler.taskExecutor = taskExecutor;
-    }
+    private ChatDetailedMapper chatDetailedMapper;
+
+    @Autowired
+    private UserService userService;
+
+    @Autowired
+    private RedisUtil redisUtil;
+
+    @Autowired
+    private Executor taskExecutor;
+
+
 
     /**
      * 发送消息
      * @param ctx
      * @param tx
      */
-    public static void send(ChannelHandlerContext ctx, TextWebSocketFrame tx) {
+    public void send(ChannelHandlerContext ctx, TextWebSocketFrame tx) {
         try {
             ChatDetailed chatDetailed = JSONObject.parseObject(tx.text(), ChatDetailed.class);
 //            System.out.println("接收到聊天消息：" + chatDetailed);
@@ -108,7 +105,7 @@ public class ChatHandler {
      * @param ctx
      * @param tx
      */
-    public static void withdraw(ChannelHandlerContext ctx, TextWebSocketFrame tx) {
+    public void withdraw(ChannelHandlerContext ctx, TextWebSocketFrame tx) {
         try {
             JSONObject jsonObject = JSONObject.parseObject(tx.text());
             Integer id = jsonObject.getInteger("id");

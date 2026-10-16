@@ -7,33 +7,26 @@ import com.teriteri.backend.pojo.IMResponse;
 import com.teriteri.backend.pojo.User;
 import com.teriteri.backend.utils.JwtUtil;
 import com.teriteri.backend.utils.RedisUtil;
-import io.jsonwebtoken.Jwt;
-import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.http.websocketx.TextWebSocketFrame;
 import io.netty.util.AttributeKey;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
-import java.util.HashSet;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 public class TokenValidationHandler extends SimpleChannelInboundHandler<TextWebSocketFrame> {
 
-    private JwtUtil jwtUtil;
-    private RedisUtil redisUtil;
+    // final 修饰 字段，构造器进行初始化，避免被修改
+    private final JwtUtil jwtUtil;
+    private final RedisUtil redisUtil;
 
     public TokenValidationHandler(JwtUtil jwtUtil, RedisUtil redisUtil) {
         this.jwtUtil = jwtUtil;
         this.redisUtil = redisUtil;
     }
-
-    public TokenValidationHandler() {}
 
     @Override
     public void channelRead0(ChannelHandlerContext ctx, TextWebSocketFrame tx) {
@@ -56,12 +49,11 @@ public class TokenValidationHandler extends SimpleChannelInboundHandler<TextWebS
 
             // 将channel存起来
             IMServer.userChannel
+                    // 存在 uid为 key 的 set集合，则返回；若不存在，创建一个线程安全的 set集合，放入Map并返回
                 .computeIfAbsent(uid, k -> ConcurrentHashMap.newKeySet())
                 .add(ctx.channel());
 
             redisUtil.addMember("login_member", uid);   // 将用户添加到在线用户集合
-            //  System.out.println("该用户的全部连接状态：" + IMServer.userChannel.get(uid));
-            //  System.out.println("当前在线人数：" + IMServer.userChannel.size());
             // 移除token验证处理器，以便以后使用无需判断
             ctx.pipeline().remove(TokenValidationHandler.class);
             // 保持消息的引用计数，以确保消息不会被释放

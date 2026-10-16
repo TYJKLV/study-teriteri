@@ -9,7 +9,7 @@ public enum CommandType {
     /**
      * 建立连接
      */
-    CONNETION(100),
+    CONNECTION(100),
 
     /**
      * 聊天功能 发送
